@@ -5,6 +5,7 @@ from collections import OrderedDict
 from threading import Thread
 from threading import Event
 
+import resource
 import psutil
 from psutil._common import bytes2human
 process = psutil.Process()
@@ -25,6 +26,7 @@ class profiler_collecteur(object):
                 self.threadForPrint = sys.stdout.isatty()
             else : 
                 self.threadForPrint = threadForPrint
+            self.start_time = time.perf_counter()
         return self._instance
 
     def save(self, fname, deltaTime, deltaMem):
@@ -39,21 +41,26 @@ class profiler_collecteur(object):
             t_str = htd(deltaTime)
             value = f"{t_str}"
             strmen = bytes2human(deltaMem)
-            self.printLine(fname, value, strmen)
+            self.print_line(fname, value, strmen)
 
-    def threadview(self, fname, deltaMem):
+    def thread_view(self, fname, deltaMem):
         if fname in self.profThread.keys():
             if deltaMem > self.profThread[fname]:
                 self.profThread[fname] = deltaMem
         else :
             self.profThread[fname] = deltaMem
-            
 
-    def printLine(self, fname, delta_time, delta_mem, end='\n', color=""):
+    def get_global_info(self):
+        run_time = htd(time.perf_counter() - self.start_time)
+        mem_peack = bytes2human(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 0.0009765625) # in bytes
+        return run_time, mem_peack
+
+    def print_line(self, fname, delta_time, delta_mem, end='\n', color=""):
         print(f"{color} ⚡ fct : {fname: ^20.20} took : {delta_time:<10} consumes : {delta_mem:<10} \033[0m", end=end)
 
     def __str__(self):
-        str = ("\n " + "⚡" * 17 + " customProfiler log : "+ "⚡" * 19)
+        run_time, mem_peack = self.get_global_info()
+        str = ("\n " + "⚡" * 5 + f" customProfiler log : global timer {run_time} / max memory use {mem_peack:^10}"+ "⚡" * 4)
         str += "\n " + "⚡" * 47
         str += "\n ⚡ {:^20} | {:8} | {:^29} | {:^13} ⚡".format("fct name"
                                                     , "Nb call"
@@ -87,16 +94,16 @@ def task(event, fname, start_time, start_mem):
         if i % 100 == True :
             t_str = htd(time.perf_counter() - start_time)
             dm = process.memory_info().rss - start_mem
-            profC.threadview(fname, dm) #sauvegarde delta mem max
+            profC.thread_view(fname, dm) #sauvegarde delta mem max
             strmen = bytes2human(dm)
-            profC.printLine(fname, t_str, strmen, end="\r", color="\033[93m")
-            
+            profC.print_line(fname, t_str, strmen, end="\r", color="\033[93m")
+
         i += 1
         if event.is_set():
             break
 
       
-class threadMananger:
+class thread_mananger:
     def __init__(self, fname, start_time, start_mem):
         self.event = Event()
         self.t = Thread(target=task, args=(self.event, fname, start_time, start_mem))
@@ -111,7 +118,7 @@ class threadMananger:
 def profiler(func):
     def wrapper(*args, **kwargs):
         if profC.threadForPrint:
-            tm = threadMananger(func.__name__, time.perf_counter(), process.memory_info().rss)
+            tm = thread_mananger(func.__name__, time.perf_counter(), process.memory_info().rss)
         
         start_mem = process.memory_info().rss
         start_time = time.perf_counter()
@@ -136,7 +143,7 @@ class magic_profiler:
 
     def __enter__(self):
         if profC.threadForPrint:
-            self.tm = threadMananger(self.func_name, time.perf_counter(), process.memory_info().rss)
+            self.tm = thread_mananger(self.func_name, time.perf_counter(), process.memory_info().rss)
         self.start_mem = process.memory_info().rss
         self.start_time = time.perf_counter()
 

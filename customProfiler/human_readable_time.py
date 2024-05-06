@@ -46,3 +46,4 @@ if __name__ == "__main__":
 
     for i in [1, 2, 59, 60, 61, 3599, 3600, 3601, 3660, 3661, 3600*120]:
         print(f"{i:8}",human_time_duration(i))
+    

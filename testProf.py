@@ -1,6 +1,8 @@
 import time
 from customProfiler import profiler, magic_profiler, profiler_collecteur
 
+pc = profiler_collecteur()
+
 @profiler
 def test(t):
     time.sleep(t)
@@ -26,3 +28,5 @@ with magic_profiler("mon code a prof") :
     time.sleep(1)
     del e
     # time.sleep(5)
+
+
