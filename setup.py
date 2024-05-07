@@ -3,11 +3,11 @@
 from setuptools import find_packages, setup
 
 setup(
-            name='customProfiler',
-            version='0.0.0',
-            description='TO DO',
-            long_description='LONG TO DO',
-            author='CEA',
+            name='custom_profiler',
+            version='0.0.1',
+            description='time and memory profiler',
+            long_description='time and memory profiler',
+            author='Karim Ammar',
             maintainer="Karim Ammar",
             author_email='karim.ammar@cea.fr',
             packages=find_packages(),

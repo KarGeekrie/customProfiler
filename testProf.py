@@ -1,7 +1,19 @@
 import time
-from customProfiler import profiler, magic_profiler, profiler_collecteur
+from custom_profiler import profiler, magic_profiler, profiler_collecteur, INTERACTIVITY_OPT_ENUM
+import logging
 
 pc = profiler_collecteur()
+pc.options(interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
+          , useLogger=True
+          , loggername = "⚡"
+          , addCustumLvl= True
+          , profilerlvl = 25)
+
+ch = logging.StreamHandler()
+logger = logging.getLogger("⚡")
+logger.addHandler(ch)
+
+#logging.getLogger("⚡").setLevel(logging.PROFILER)
 
 @profiler
 def test(t):
