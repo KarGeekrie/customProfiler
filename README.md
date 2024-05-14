@@ -19,6 +19,7 @@ pip install -e customProfiler
 
 For profil python function, just add *@profiler* :
 ```python
+import time
 from custom_profiler import profiler
 
 @profiler
@@ -51,6 +52,7 @@ Your log :
 Profil row code with minimal impact :
 
 ```python
+import time
 from custom_profiler magic_profiler
 
 with magic_profiler("my_code_to_prof") :
@@ -77,6 +79,7 @@ Your log :
 
 For profil python function line by line, just add *@profiler_lbl* (follow memory peak is Not Avail in this case) :
 ```python
+import time
 from custom_profiler import profiler_lbl
 
 @profiler_lbl
@@ -137,8 +140,10 @@ The other options allow you to activate a logger :
 * *profilerlvl* : logging level, default : *25*
 
 ```python
-from custom_profiler import profiler, profiler_lbl, magic_profiler, profiler_collecteur, INTERACTIVITY_OPT_ENUM
+import time
 import logging
+
+from custom_profiler import profiler, profiler_lbl, magic_profiler, profiler_collecteur, INTERACTIVITY_OPT_ENUM
 
 loggername = " ⚡" # logger name
 addCustumLvl = False # add "PROFILER" level in logger
@@ -150,12 +155,11 @@ pc.options(interractivity = INTERACTIVITY_OPT_ENUM.ENABLE # ENABLE / MF_NO_INTER
           , addCustumLvl = addCustumLvl
           , profilerlvl = 25)
 
-logInFile = True
+logInConsol = True
 
 logger = logging.getLogger(loggername)
-if logInFile: #Log in consol
-    ch = logging.StreamHandler()
-    logger.addHandler(ch)
+if logInConsol: #Log in consol
+    logging.basicConfig()
 else : #Log in file
     logging.basicConfig(filename='custom_profiler.log', filemode='w')
 
