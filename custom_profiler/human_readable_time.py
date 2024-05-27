@@ -29,7 +29,7 @@ def human_time_duration(seconds):
         return f"{Decimal(seconds):11.2E}s "
     else :
         if seconds < 3600 :
-            return f"{seconds%60:6.0f}min{seconds//60:2.0f}s"
+            return f"{seconds//60:6.0f}min{seconds%60:2.0f}s"
         else :
             h = seconds // 3600
             m = (seconds - h * 3600) // 60
@@ -44,6 +44,6 @@ if __name__ == "__main__":
             , human_time_duration(10**-i - 10**(-i-3))
             , human_time_duration(1/3*10**-i))
 
-    for i in [1, 2, 59, 60, 61, 3599, 3600, 3601, 3660, 3661, 3600*120]:
+    for i in [1, 2, 59, 60, 61, 144, 3599, 3600, 3601, 3660, 3661, 3600*120]:
         print(f"{i:8}",human_time_duration(i))
     
