@@ -64,9 +64,10 @@ class profiler_collecteur(object):
         if fname in self.profData.keys():
             self.profData[fname]["dt"] += deltaTime
             self.profData[fname]["dm"] += deltaMem
+            self.profData[fname]["dm_list"].append(deltaMem)
             self.profData[fname]["nbCall"] += 1
         else :
-            self.profData[fname] = {"dt": deltaTime ,"dm": deltaMem ,"nbCall": 1}
+            self.profData[fname] = {"dt": deltaTime ,"dm": deltaMem, "dm_list": [deltaMem], "nbCall": 1}
 
         t_str = htd(deltaTime)
         value = f"{t_str}"
@@ -96,7 +97,12 @@ class profiler_collecteur(object):
     def print_line(self, fname, delta_time, delta_mem, end='\n', color=""):
         delta_mem = " Δ " + f"{delta_mem:>7}"
         if fname in self.profThread.keys():
-            delta_mem += " / peak " +  f"{bytes2human(self.profThread[fname]):>7}"
+            mmax = 0.
+            if fname in self.profData.keys(): 
+                mmax = max(self.profData[fname]["dm_list"])
+            if mmax < self.profThread[fname] :
+                mmax = self.profThread[fname]
+            delta_mem += " / peak " +  f"{bytes2human(mmax):>7}"
         toprint = f"{color} ⚡ {fname: ^21} took : {delta_time:<10} consumes : {delta_mem} \033[0m"
         self._print(toprint, end)
     
@@ -104,10 +110,10 @@ class profiler_collecteur(object):
         run_time, mem_peack = self.get_global_info()
         str = ("\n " + "⚡" * 6 + f" customProfiler log : global timer {run_time} / max memory use {mem_peack:^10}"+ "⚡" * 6)
         str += "\n " + "⚡" * 50
-        str += "\n ⚡ {:^31} | {:8} | {:^29} | {:^17} ⚡".format("fct name"
+        str += "\n ⚡ {:^31} | {:8} | {:<29} | {:^17} ⚡".format("fct name"
                                                     , "Nb call"
-                                                    , "mean time / global"
-                                                    , " mem Δ /  peak ")
+                                                    , "  time : mean / global"
+                                                    , "mem : mean / max")
         str += "\n ⚡ "+ "="*95 + "⚡"
         for key, val in self.profData.items():
             t_str = htd(val["dt"])
@@ -115,10 +121,11 @@ class profiler_collecteur(object):
             str += f"\n ⚡ {key: ^31.31} | {val['nbCall']:^8} "
             str += f"| {t_p_call_str} / {t_str} "
             strmen = bytes2human(self.profData[key]["dm"]/val['nbCall'])
+            mmax = max(self.profData[key]["dm_list"])
             if key in self.profThread.keys():
-                strmaxmem = bytes2human(self.profThread[key])
-            else :
-                strmaxmem = "N.A"
+                if mmax < self.profThread[key] :
+                    mmax = self.profThread[key]
+            strmaxmem = bytes2human(mmax)
             str += f"| {strmen:>7} / {strmaxmem:>7} ⚡"
         str += "\n " + "⚡" * 50
         return str

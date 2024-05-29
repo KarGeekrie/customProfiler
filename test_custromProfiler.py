@@ -12,6 +12,16 @@ def my_func():
 
 a = my_func()
 
+@profiler
+def f_f():
+    b = [2] * (2 * 10 ** 7)  
+    time.sleep(3)
+    a = my_func()
+    time.sleep(3)
+
+f_f()
+
+
 with magic_profiler("my_code_to_prof") :
     d = [1] * (10 ** 6)
     e = [2] * (2 * 10 ** 7)  
@@ -19,7 +29,7 @@ with magic_profiler("my_code_to_prof") :
     del e
 
 @profiler_lbl
-def my_func():
+def my_func_lbl():
     a = [1] * (10 ** 6)
     b = [2] * (2 * 10 ** 7)  
     time.sleep(2)
@@ -27,7 +37,7 @@ def my_func():
     time.sleep(2)
     return a
 
-a = my_func()
+a = my_func_lbl()
 
 """
 import logging

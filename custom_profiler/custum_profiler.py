@@ -3,6 +3,7 @@ import time
 
 from functools import wraps
 
+import threading
 from threading import Thread
 from threading import Event
 
@@ -28,13 +29,14 @@ def task(event, fname, start_time, start_mem):
             profC.thread_view(fname, dm) #sauvegarde delta mem max
             strmen = bytes2human(dm)
             if profC.interractivity == INTERACTIVITY_OPT_ENUM.ENABLE :
-                profC.print_line(fname, t_str, strmen, end="\r", color="\033[93m")
+                if threading.active_count() < 3:
+                    profC.print_line(fname, t_str, strmen, end="\r", color="\033[93m")
 
         i += 1
         if event.is_set():
             break
 
-      
+
 class thread_mananger:
     def __init__(self, fname, start_time, start_mem):
         self.event = Event()
