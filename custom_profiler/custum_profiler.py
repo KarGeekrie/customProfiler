@@ -11,9 +11,9 @@ import psutil
 from psutil._common import bytes2human
 process = psutil.Process()
 
-from .line_by_line import trace_calls
-from .collecteur import profiler_collecteur, INTERACTIVITY_OPT_ENUM
-from .human_readable_time import human_time_duration as htd
+from custom_profiler.line_by_line import trace_calls
+from custom_profiler.collecteur import profiler_collecteur, INTERACTIVITY_OPT_ENUM
+from custom_profiler.human_readable_time import human_time_duration as htd
 
 
 profC = profiler_collecteur()

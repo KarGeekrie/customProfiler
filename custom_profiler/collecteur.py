@@ -1,13 +1,16 @@
 import time
 import sys
-import resource
+if sys.platform == 'linux':
+    import resource
 import logging
 from collections import OrderedDict
 
+import psutil
 from psutil._common import bytes2human
+process = psutil.Process()
 
-from .custum_logger import add_logging_level
-from .human_readable_time import human_time_duration as htd
+from custom_profiler.custum_logger import add_logging_level
+from custom_profiler.human_readable_time import human_time_duration as htd
 
 
 class INTERACTIVITY_OPT_ENUM :
@@ -85,7 +88,10 @@ class profiler_collecteur(object):
 
     def get_global_info(self):
         run_time = htd(time.perf_counter() - self.start_time)
-        mem_peack = bytes2human(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 0.0009765625) # in bytes
+        if sys.platform == 'win32':
+            mem_peack = bytes2human(process.memory_info().peak_wset)
+        else :
+            mem_peack = bytes2human(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 0.0009765625) # in bytes
         return run_time, mem_peack
     
     def _print(self, toprint, end='\n'):

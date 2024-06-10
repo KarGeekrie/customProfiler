@@ -6,8 +6,8 @@ import psutil
 from psutil._common import bytes2human
 process = psutil.Process()
 
-from .collecteur import profiler_collecteur
-from .human_readable_time import human_time_duration as htd
+from custom_profiler.collecteur import profiler_collecteur
+from custom_profiler.human_readable_time import human_time_duration as htd
 
 profC = profiler_collecteur()
 
