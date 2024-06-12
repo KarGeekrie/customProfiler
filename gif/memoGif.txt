@@ -1,0 +1,14 @@
+https://github.com/faressoft/terminalizer
++ https://nodejs.org/en/download/package-manager -> v16
+
+install terminalizer centos7:
+>> curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+>> nvm install 16
+>> node -v # should print `v16.20.2`
+>> npm -v # should print `8.19.4`
+>> npm install -g terminalizer
+
+
+use :
+>> terminalizer record demo
+>> terminalizer render demo
