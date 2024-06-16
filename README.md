@@ -55,7 +55,7 @@ Profil row code with minimal impact :
 
 ```python
 import time
-from custom_profiler magic_profiler
+from custom_profiler import magic_profiler
 
 with magic_profiler("my_code_to_prof") :
     d = [1] * (10 ** 6)
