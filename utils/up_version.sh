@@ -27,8 +27,10 @@ git_status="$(git status --porcelain)"
 if [[ -n "${git_status}" ]]; then
     read -p "Current repository is not clean: '${git_status}'. Do you want to continue ? (yes/[no]) " answer
     if [[ -z "${answer}" ]]||[[ "${answer}" == "n"* ]]; then
+        echo "exit"
         exit 0
     fi
+    echo "go"
 fi
 
 # Check input format
@@ -36,6 +38,7 @@ if ! (python3 -c "if not len('${version_name}'.split('.')) == 3: exit(1)"); then
     echo "ERROR: version format is not correct: '${version_name}', expected 'x.y.z'."
     exit 1
 fi
+echo "check input format OK"
 
 # Check version number
 versions_tagged=( $(git tag | grep -e '.') )
@@ -45,12 +48,13 @@ for version_tagged in ${versions_tagged[@]}; do
         exit 1
     fi
 done
+echo "check version number OK"
 
 # Work in venv
-if [ ! -d "${current_script_dir}/.venv_utils" ]; then
-    python3 -m venv ${current_script_dir}/.venv_utils
-fi
-. ${current_script_dir}/.venv_utils/bin/activate
+# if [ ! -d "${current_script_dir}/.venv_utils" ]; then
+#     python3 -m venv ${current_script_dir}/.venv_utils
+# fi
+# . ${current_script_dir}/.venv_utils/bin/activate
 pip install --upgrade pip setuptools
 
 # Tag the version
