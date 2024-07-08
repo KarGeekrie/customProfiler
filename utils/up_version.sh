@@ -8,15 +8,7 @@ unalias -a
 current_script_dir="$( cd "$( dirname "${0}" )" &> /dev/null && pwd )"
 project_root_dir="$(dirname ${current_script_dir})"
 version_file=$(python setup.py --version)
-
-########################
-# Cli
-########################
-if (( $# != 1 )); then
-    echo "ERROR: You must provide exactly 1 argument: version number as x.y.z"
-    exit 1
-fi
-version_name=$1
+version_name=version_file
 
 ########################
 # Main
@@ -55,12 +47,12 @@ echo "check version number OK"
 #     python3 -m venv ${current_script_dir}/.venv_utils
 # fi
 # . ${current_script_dir}/.venv_utils/bin/activate
-pip install --upgrade pip setuptools
+pip install --upgrade pip setuptools tox
 
 # Tag the version
-echo ${version_name} > ${version_file}
-git add ${version_file}
-git commit -m "Version ${version_name}"
+# echo ${version_name} > ${version_file}
+# git add ${version_file}
+# git commit -m "Version ${version_name}"
 git tag ${version_name}
 
 # install current version in venv

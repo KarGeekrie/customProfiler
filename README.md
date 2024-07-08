@@ -8,7 +8,7 @@
 
 For user :
 ```bash
-pip install git+https://github.com/KarGeekrie/customProfiler.git
+pip install custom_profiler
 ```
 
 For devellopeur :
