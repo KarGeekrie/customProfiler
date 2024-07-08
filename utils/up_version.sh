@@ -51,6 +51,7 @@ pip install --upgrade pip setuptools tox
 
 # Tag the version
 git tag ${version_file}
+git push origin ${version_file}
 
 # install current version in venv
 python3 -m pip install --upgrade ${project_root_dir}
