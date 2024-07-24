@@ -6,7 +6,6 @@ import logging
 from collections import OrderedDict
 
 import psutil
-from psutil._common import bytes2human
 process = psutil.Process()
 
 from custom_profiler.custum_logger import add_logging_level
@@ -22,6 +21,12 @@ class INTERACTIVITY_OPT_ENUM :
 def get_ENUM_list(ENUM):
     return [key for key in ENUM.__dict__ if key not in ["__main__", "__module__", "__doc__", '__dict__', '__weakref__']]
 
+
+def bytes2human(deltaMem):
+    strToAdd = "-"
+    if abs(deltaMem) == 0 or deltaMem / abs(deltaMem) == 1. :
+        strToAdd = ""
+    return strToAdd+psutil._common.bytes2human(abs(deltaMem))
 
 class profiler_collecteur(object):
     _instance = None
@@ -114,26 +119,30 @@ class profiler_collecteur(object):
     
     def __str__(self):
         run_time, mem_peack = self.get_global_info()
-        str = ("\n " + "⚡" * 6 + f" customProfiler log : global timer {run_time} / max memory use {mem_peack:^10}"+ "⚡" * 6)
-        str += "\n " + "⚡" * 50
-        str += "\n ⚡ {:^31} | {:8} | {:<29} | {:^17} ⚡".format("fct name"
-                                                    , "Nb call"
-                                                    , "  time : mean / global"
-                                                    , "mem : mean / max")
-        str += "\n ⚡ "+ "="*95 + "⚡"
-        for key, val in self.profData.items():
-            t_str = htd(val["dt"])
-            t_p_call_str = htd(val["dt"]/val['nbCall'])
-            str += f"\n ⚡ {key: ^31.31} | {val['nbCall']:^8} "
-            str += f"| {t_p_call_str} / {t_str} "
-            strmen = bytes2human(self.profData[key]["dm"]/val['nbCall'])
-            mmax = max(self.profData[key]["dm_list"])
-            if key in self.profThread.keys():
-                if mmax < self.profThread[key] :
-                    mmax = self.profThread[key]
-            strmaxmem = bytes2human(mmax)
-            str += f"| {strmen:>7} / {strmaxmem:>7} ⚡"
-        str += "\n " + "⚡" * 50
+        if self.profData.items() :
+            str = ("\n " + "⚡" * 6 + f" customProfiler log : global timer {run_time} / max memory use {mem_peack:^10}"+ "⚡" * 6)
+            str += "\n " + "⚡" * 50
+            str += "\n ⚡ {:^31} | {:8} | {:<29} | {:^17} ⚡".format("fct name"
+                                                        , "Nb call"
+                                                        , "  time : mean / global"
+                                                        , "mem : mean / max")
+            str += "\n ⚡ "+ "="*95 + "⚡"
+            for key, val in self.profData.items():
+                t_str = htd(val["dt"])
+                t_p_call_str = htd(val["dt"]/val['nbCall'])
+                str += f"\n ⚡ {key: ^31.31} | {val['nbCall']:^8} "
+                str += f"| {t_p_call_str} / {t_str} "
+                strmen = bytes2human(self.profData[key]["dm"]/val['nbCall'])
+                mmax = max(self.profData[key]["dm_list"])
+                if key in self.profThread.keys():
+                    if mmax < self.profThread[key] :
+                        mmax = self.profThread[key]
+
+                strmaxmem = bytes2human(mmax)
+                str += f"| {strmen:>7} / {strmaxmem:>7} ⚡"
+            str += "\n " + "⚡" * 50
+        else :
+            str = ("\n " + "⚡" * 2 + f" customProfiler log : global timer {run_time} / max memory use {mem_peack:^10}")
         return str
 
     def __del__(self):
