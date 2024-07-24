@@ -8,7 +8,8 @@
 
 For user :
 ```bash
-pip install custom_profiler
+pip install custom-profiler 
+# it's also ok : pip install custom_profiler
 ```
 
 For devellopeur :
