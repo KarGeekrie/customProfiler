@@ -55,6 +55,7 @@ def profiler(func, linePerline):
         if profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE and linePerline == False:
             tm = thread_mananger(func.__name__, time.perf_counter(), process.memory_info().rss)
         
+        profC.incr()
         start_mem = process.memory_info().rss
         start_time = time.perf_counter()
 
@@ -84,6 +85,7 @@ class magic_profiler():
     def __enter__(self):
         if profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE :
             self.tm = thread_mananger(self.func_name, time.perf_counter(), process.memory_info().rss)
+        profC.incr()
         self.start_mem = process.memory_info().rss
         self.start_time = time.perf_counter()
 

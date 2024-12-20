@@ -39,6 +39,7 @@ class profiler_collecteur(object):
             self.interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
             self.logger = None
             self.start_time = time.perf_counter()
+            self.deep = [-1, -1]
         return self._instance
 
     def options(self, interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
@@ -48,6 +49,8 @@ class profiler_collecteur(object):
                 , profilerlvl = 25):
         
         assert interractivity in get_ENUM_list(INTERACTIVITY_OPT_ENUM), f'interractivity {interractivity} must be in INTERACTIVITY_OPT_ENUM : {getEnumList(INTERACTIVITY_OPT_ENUM)}'
+        
+        self.interractivity = interractivity
         
         if interractivity == INTERACTIVITY_OPT_ENUM.AUTO :
             if sys.stdout.isatty():
@@ -68,14 +71,17 @@ class profiler_collecteur(object):
         else :
             self.logger = None
 
+    def incr(self):
+        self.deep[0] += 1
+
     def save(self, fname, deltaTime, deltaMem, long_fname=None):
         if fname in self.profData.keys():
             self.profData[fname]["dt"] += deltaTime
-            self.profData[fname]["dm"] += deltaMem
             self.profData[fname]["dm_list"].append(deltaMem)
             self.profData[fname]["nbCall"] += 1
+            self.profData[fname]["deep"].append(self.deep[0])
         else :
-            self.profData[fname] = {"dt": deltaTime ,"dm": deltaMem, "dm_list": [deltaMem], "nbCall": 1}
+            self.profData[fname] = {"dt": deltaTime , "dm_list": [deltaMem], "nbCall": 1, "deep": [self.deep[0]]}
 
         t_str = htd(deltaTime)
         value = f"{t_str}"
@@ -83,6 +89,7 @@ class profiler_collecteur(object):
         if long_fname == None :
             long_fname = fname
         self.print_line(long_fname, value, strmen)
+        self.deep[0] -= 1
 
     def thread_view(self, fname, deltaMem):
         if fname in self.profThread.keys():
@@ -112,15 +119,23 @@ class profiler_collecteur(object):
             print(toprint, end=end)
 
     def print_line(self, fname, delta_time, delta_mem, end='\n', color=""):
-        delta_mem = " Δ " + f"{delta_mem:>7}"
+        delta_mem_str = " Δ " + f"{delta_mem:>7}"
         if fname in self.profThread.keys():
             mmax = 0.
             if fname in self.profData.keys(): 
                 mmax = max(self.profData[fname]["dm_list"])
             if mmax < self.profThread[fname] :
                 mmax = self.profThread[fname]
-            delta_mem += " / peak " +  f"{bytes2human(mmax):>7}"
-        toprint = f"{color} ⚡ {fname: ^21} took : {delta_time:<10} consumes : {delta_mem} \033[0m"
+            delta_mem_str += " / peak " +  f"{bytes2human(mmax):>7}"
+        elif self.profThread.keys() :
+            delta_mem_str += " / peak " +  f"{delta_mem:>7}"
+        if self.deep[0] > 0:
+            if self.deep[1] != self.deep[0] :
+                fname = "  " * self.deep[0] + "┌─" + fname
+            else :
+                fname = "  " * self.deep[0] + "├─" + fname
+        toprint = f"{color} ⚡ {fname: <50.50} took : {delta_time:<10} consumes : {delta_mem_str} \033[0m"
+        self.deep[1] = self.deep[0]
         self._print(toprint, end)
 
     def __strMaxMemory(self, key, rbytes=False):
@@ -137,23 +152,27 @@ class profiler_collecteur(object):
     def __str__(self):
         ggi = self.get_global_info()
         if self.profData.items() :
-            str = "\n " + "⚡" * 6 
+            str = "\n " + "⚡" * 8 
             str += f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}"
-            str += "⚡" * 6 + "\n " + "⚡" * 50
-            str += "\n ⚡ {:^31} | {:8} | {:<29} | {:^17} ⚡".format("fct name"
+            str += "⚡" * 7 + "\n " + "⚡" * 53
+            str += "\n ⚡ {:^37} | {:8} | {:<29} | {:^17} ⚡".format("fct name"
                                                         , "Nb call"
                                                         , "  time : mean / global"
-                                                        , "mem : mean / max")
-            str += "\n ⚡ "+ "="*95 + "⚡"
+                                                        , "mem : max / maxTh")
+            str += "\n ⚡ "+ "="*101 + "⚡"
             for key, val in self.profData.items():
                 t_str = htd(val["dt"])
                 t_p_call_str = htd(val["dt"]/val['nbCall'])
-                str += f"\n ⚡ {key: ^31.31} | {val['nbCall']:^8} "
+
+                dp = list(sorted(set(val["deep"])))
+                dp_str = ''.join(["+" if i in dp else "-" for i in range(4)])
+
+                str += f"\n ⚡ {dp_str} {key: ^32.32} | {val['nbCall']:^8} "
                 str += f"| {t_p_call_str} / {t_str} "
-                strmen = bytes2human(val["dm"]/val['nbCall'])
+                strmen = bytes2human(max(val["dm_list"]))
                 strmaxmem = self.__strMaxMemory(key)
                 str += f"| {strmen:>7} / {strmaxmem:>7} ⚡"
-            str += "\n " + "⚡" * 50
+            str += "\n " + "⚡" * 53
         else :
             str = ("\n " + "⚡" * 2 + f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}")
         return str
@@ -172,7 +191,7 @@ class profiler_collecteur(object):
                  "global_time_s": val["dt"],
                  "mean_time": htd(val["dt"]/val['nbCall']),
                  "mean_time_s": val["dt"]/val['nbCall'],
-                 "mean_memory": bytes2human(val["dm"]/val['nbCall']),
-                 "mean_memory_b": val["dm"]/val['nbCall'],
+                 "mean_memory": bytes2human(max(val['dm_list'])),
+                 "mean_memory_b": val['dm_list'],
                  "max_memory": self.__strMaxMemory(key),
                  "max_memory_b": self.__strMaxMemory(key, rbytes=True)}
