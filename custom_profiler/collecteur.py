@@ -92,12 +92,18 @@ class profiler_collecteur(object):
             self.profThread[fname] = deltaMem
 
     def get_global_info(self):
-        run_time = htd(time.perf_counter() - self.start_time)
+        run_time_s = time.perf_counter() - self.start_time
+        run_time = htd(run_time_s)
         if sys.platform == 'win32':
-            mem_peack = bytes2human(process.memory_info().peak_wset)
+            mem_peack_b = process.memory_info().peak_wset
+            mem_peack = bytes2human(mem_peack_b)
         else :
-            mem_peack = bytes2human(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 0.0009765625) # in bytes
-        return run_time, mem_peack
+            mem_peack_b = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 0.0009765625
+            mem_peack = bytes2human(mem_peack_b) # in bytes
+        return {"global_run_time": run_time, 
+                "global_run_time_s": run_time_s, 
+                "memory_peack": mem_peack,
+                "memory_peack_b": mem_peack_b}
     
     def _print(self, toprint, end='\n'):
         if self.logger:
@@ -116,12 +122,24 @@ class profiler_collecteur(object):
             delta_mem += " / peak " +  f"{bytes2human(mmax):>7}"
         toprint = f"{color} ⚡ {fname: ^21} took : {delta_time:<10} consumes : {delta_mem} \033[0m"
         self._print(toprint, end)
-    
+
+    def __strMaxMemory(self, key, rbytes=False):
+        val = self.profData[key]
+        mmax = max(val["dm_list"])
+        if key in self.profThread.keys():
+            if mmax < self.profThread[key] :
+                mmax = self.profThread[key]
+        if rbytes :
+            return mmax
+        else :
+            return bytes2human(mmax)
+
     def __str__(self):
-        run_time, mem_peack = self.get_global_info()
+        ggi = self.get_global_info()
         if self.profData.items() :
-            str = ("\n " + "⚡" * 6 + f" customProfiler log : global timer {run_time} / max memory use {mem_peack:^10}"+ "⚡" * 6)
-            str += "\n " + "⚡" * 50
+            str = "\n " + "⚡" * 6 
+            str += f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}"
+            str += "⚡" * 6 + "\n " + "⚡" * 50
             str += "\n ⚡ {:^31} | {:8} | {:<29} | {:^17} ⚡".format("fct name"
                                                         , "Nb call"
                                                         , "  time : mean / global"
@@ -132,18 +150,29 @@ class profiler_collecteur(object):
                 t_p_call_str = htd(val["dt"]/val['nbCall'])
                 str += f"\n ⚡ {key: ^31.31} | {val['nbCall']:^8} "
                 str += f"| {t_p_call_str} / {t_str} "
-                strmen = bytes2human(self.profData[key]["dm"]/val['nbCall'])
-                mmax = max(self.profData[key]["dm_list"])
-                if key in self.profThread.keys():
-                    if mmax < self.profThread[key] :
-                        mmax = self.profThread[key]
-
-                strmaxmem = bytes2human(mmax)
+                strmen = bytes2human(val["dm"]/val['nbCall'])
+                strmaxmem = self.__strMaxMemory(key)
                 str += f"| {strmen:>7} / {strmaxmem:>7} ⚡"
             str += "\n " + "⚡" * 50
         else :
-            str = ("\n " + "⚡" * 2 + f" customProfiler log : global timer {run_time} / max memory use {mem_peack:^10}")
+            str = ("\n " + "⚡" * 2 + f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}")
         return str
 
     def __del__(self):
         print(self)
+
+    def __getitem__(self, key):
+        try :
+            val = self.profData[key]
+        except KeyError:
+            raise KeyError(f"key avail in collecteur : {list(self.profData.keys())}")
+
+        return { "nb_call": val['nbCall'],
+                 "global_time": htd(val["dt"]),
+                 "global_time_s": val["dt"],
+                 "mean_time": htd(val["dt"]/val['nbCall']),
+                 "mean_time_s": val["dt"]/val['nbCall'],
+                 "mean_memory": bytes2human(val["dm"]/val['nbCall']),
+                 "mean_memory_b": val["dm"]/val['nbCall'],
+                 "max_memory": self.__strMaxMemory(key),
+                 "max_memory_b": self.__strMaxMemory(key, rbytes=True)}
