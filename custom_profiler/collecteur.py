@@ -191,7 +191,7 @@ class profiler_collecteur(object):
                  "global_time_s": val["dt"],
                  "mean_time": htd(val["dt"]/val['nbCall']),
                  "mean_time_s": val["dt"]/val['nbCall'],
-                 "mean_memory": bytes2human(max(val['dm_list'])),
-                 "mean_memory_b": val['dm_list'],
-                 "max_memory": self.__strMaxMemory(key),
-                 "max_memory_b": self.__strMaxMemory(key, rbytes=True)}
+                 "max_memory": bytes2human(max(val['dm_list'])),
+                 "max_memory_b": val['dm_list'],
+                 "peack_memory": self.__strMaxMemory(key),
+                 "peack_memory_b": self.__strMaxMemory(key, rbytes=True)}

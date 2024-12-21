@@ -1,6 +1,6 @@
 import time
 import pprint
-from custom_profiler import profiler, magic_profiler, prof_coll
+from custom_profiler import profiler, magic_profiler, profiler_collecteur
 
 @profiler
 def my_func():
@@ -30,6 +30,6 @@ with magic_profiler("my_code_to_prof") :
     time.sleep(1)
     del e
 
-pprint.pprint(prof_coll["my_code_to_prof"])
-pprint.pprint(prof_coll.get_global_info())
+pprint.pprint(profiler_collecteur["my_code_to_prof"])
+pprint.pprint(profiler_collecteur.get_global_info())
 # pprint.pprint(prof_coll["frac"])

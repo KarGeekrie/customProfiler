@@ -1,7 +1,8 @@
 import time
 import logging
 
-from custom_profiler import profiler, profiler_lbl, magic_profiler, profiler_collecteur, INTERACTIVITY_OPT_ENUM
+from custom_profiler import profiler, profiler_lbl, magic_profiler, INTERACTIVITY_OPT_ENUM
+from custom_profiler import profiler_collecteur as pc
 
 def test_options(filename='custom_profiler.log', # None = logger in csl ; False = no logger
                  interractivity = INTERACTIVITY_OPT_ENUM.ENABLE, # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
@@ -10,7 +11,6 @@ def test_options(filename='custom_profiler.log', # None = logger in csl ; False 
 
     useLogger = True if filename != False else False
 
-    pc = profiler_collecteur()
     pc.options(interractivity = interractivity # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
             , useLogger = useLogger
             , loggername = loggername
