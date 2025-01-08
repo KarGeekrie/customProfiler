@@ -4,6 +4,7 @@ if sys.platform == 'linux':
     import resource
 import logging
 from collections import OrderedDict
+import atexit
 
 import psutil
 process = psutil.Process()
@@ -36,40 +37,14 @@ class profiler_collecteur(object):
             self._instance = super(profiler_collecteur, self).__new__(self)
             self.profData = OrderedDict()
             self.profThread = OrderedDict()
-            self.interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
+            self.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
             self.logger = None
             self.start_time = time.perf_counter()
             self.deep = [-1, -1]
+            self.forcePrintInCsl = False
+            self.noSummaryInLog = False
+
         return self._instance
-
-    def options(self, interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
-                , useLogger=False
-                , loggername = " ⚡"
-                , addCustumLvl= True
-                , profilerlvl = 25):
-        
-        assert interractivity in get_ENUM_list(INTERACTIVITY_OPT_ENUM), f'interractivity {interractivity} must be in INTERACTIVITY_OPT_ENUM : {getEnumList(INTERACTIVITY_OPT_ENUM)}'
-        
-        self.interractivity = interractivity
-        
-        if interractivity == INTERACTIVITY_OPT_ENUM.AUTO :
-            if sys.stdout.isatty():
-                self.interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
-            else :
-                self.interractivity = INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC
-
-        if useLogger:
-            if self.interractivity == INTERACTIVITY_OPT_ENUM.ENABLE :
-                self.interractivity = INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC
-            if addCustumLvl :
-                add_logging_level('PROFILER', profilerlvl)
-                logging.getLogger().setLevel("PROFILER")  
-                self.logger = logging.getLogger(loggername).profiler
-            else :
-                logging.getLogger().setLevel("INFO")  
-                self.logger = logging.getLogger(loggername).info
-        else :
-            self.logger = None
 
     def incr(self):
         self.deep[0] += 1
@@ -115,8 +90,8 @@ class profiler_collecteur(object):
     def _print(self, toprint, end='\n'):
         if self.logger:
             self.logger(toprint)
-        else:
-            print(toprint, end=end)
+        if self.forcePrintInCsl or not self.logger:
+            print(" ⚡"+ toprint, end=end)
 
     def print_line(self, fname, delta_time, delta_mem, end='\n', color=""):
         delta_mem_str = " Δ " + f"{delta_mem:>7}"
@@ -134,7 +109,8 @@ class profiler_collecteur(object):
                 fname = "  " * self.deep[0] + "┌─" + fname
             else :
                 fname = "  " * self.deep[0] + "├─" + fname
-        toprint = f"{color} ⚡ {fname: <50.50} took : {delta_time:<10} consumes : {delta_mem_str} \033[0m"
+        colorEnd = "" if color == "" else "\033[0m"
+        toprint = f"{color} {fname: <46.46} | took : {delta_time:<10} | consumes : {delta_mem_str} {colorEnd}"
         self.deep[1] = self.deep[0]
         self._print(toprint, end)
 
@@ -154,12 +130,12 @@ class profiler_collecteur(object):
         if self.profData.items() :
             str = "\n " + "⚡" * 8 
             str += f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}"
-            str += "⚡" * 7 + "\n " + "⚡" * 53
-            str += "\n ⚡ {:^37} | {:8} | {:<29} | {:^17} ⚡".format("fct name"
+            str += "\n " + "⚡" * 8
+            str += "\n ⚡ {:^45} | {:8} | {:<29} | {:^17}".format("fct name"
                                                         , "Nb call"
                                                         , "  time : mean / global"
                                                         , "mem : max / maxTh")
-            str += "\n ⚡ "+ "="*101 + "⚡"
+            str += "\n ⚡ "+ "="*108
             for key, val in self.profData.items():
                 t_str = htd(val["dt"])
                 t_p_call_str = htd(val["dt"]/val['nbCall'])
@@ -167,18 +143,19 @@ class profiler_collecteur(object):
                 dp = list(sorted(set(val["deep"])))
                 dp_str = ''.join(["+" if i in dp else "-" for i in range(4)])
 
-                str += f"\n ⚡ {dp_str} {key: ^32.32} | {val['nbCall']:^8} "
+                str += f"\n ⚡ {dp_str} {key: ^40.40} | {val['nbCall']:^8} "
                 str += f"| {t_p_call_str} / {t_str} "
                 strmen = bytes2human(max(val["dm_list"]))
                 strmaxmem = self.__strMaxMemory(key)
-                str += f"| {strmen:>7} / {strmaxmem:>7} ⚡"
-            str += "\n " + "⚡" * 53
+                str += f"| {strmen:>7} / {strmaxmem:>7}"
+            str += "\n " + "⚡" * 8
         else :
             str = ("\n " + "⚡" * 2 + f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}")
         return str
 
     def __del__(self):
-        print(self)
+        if self.forcePrintInCsl or not self.logger:
+            print(self)
 
     def __getitem__(self, key):
         try :
@@ -195,3 +172,42 @@ class profiler_collecteur(object):
                  "max_memory_b": val['dm_list'],
                  "peack_memory": self.__strMaxMemory(key),
                  "peack_memory_b": self.__strMaxMemory(key, rbytes=True)}
+
+    def options(self, interractivity = INTERACTIVITY_OPT_ENUM.AUTO
+                , useLogger=False
+                , loggername = " ⚡ "
+                , addCustumLvl= True
+                , profilerlvl = 25
+                , forcePrintInCsl = False
+                , noSummaryInLog = False):
+        
+        assert interractivity in get_ENUM_list(INTERACTIVITY_OPT_ENUM), f'interractivity {interractivity} must be in INTERACTIVITY_OPT_ENUM : {getEnumList(INTERACTIVITY_OPT_ENUM)}'
+        
+        self.interractivity = interractivity
+        self.forcePrintInCsl = forcePrintInCsl
+        self.noSummaryInLog = noSummaryInLog
+        
+        if interractivity == INTERACTIVITY_OPT_ENUM.AUTO :
+            if sys.stdout.isatty():
+                self.interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
+            else :
+                self.interractivity = INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC
+
+        if useLogger:
+            if self.interractivity == INTERACTIVITY_OPT_ENUM.ENABLE :
+                self.interractivity = INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC
+            if addCustumLvl :
+                add_logging_level('PROFILER', profilerlvl)
+                logging.getLogger().setLevel("PROFILER")  
+                self.logger = logging.getLogger(loggername).profiler
+            else :
+                logging.getLogger().setLevel("INFO")  
+                self.logger = logging.getLogger(loggername).info
+
+            if not self.noSummaryInLog:
+                def log_end_message():
+                    logSummary = self.__str__().replace('\n ', '\n          ⚡')
+                    self.logger("   ⚡⚡⚡⚡⚡⚡" + logSummary)
+                atexit.register(log_end_message)
+        else :
+            self.logger = None
