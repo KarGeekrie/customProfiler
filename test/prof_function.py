@@ -11,3 +11,6 @@ def my_func():
     return a
 
 a = my_func()
+b = my_func()
+c = my_func()
+

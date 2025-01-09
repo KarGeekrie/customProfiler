@@ -89,9 +89,9 @@ class profiler_collecteur(object):
     
     def _print(self, toprint, end='\n'):
         if self.logger:
-            self.logger(toprint)
+            self.logger("  " + toprint)
         if self.forcePrintInCsl or not self.logger:
-            print(" ⚡"+ toprint, end=end)
+            print(" ⚡" + toprint, end=end)
 
     def print_line(self, fname, delta_time, delta_mem, end='\n', color=""):
         delta_mem_str = " Δ " + f"{delta_mem:>7}"
@@ -110,7 +110,7 @@ class profiler_collecteur(object):
             else :
                 fname = "  " * self.deep[0] + "├─" + fname
         colorEnd = "" if color == "" else "\033[0m"
-        toprint = f"{color} {fname: <46.46} | took : {delta_time:<10} | consumes : {delta_mem_str} {colorEnd}"
+        toprint = f"{color} {fname: <45.45} | takes : {delta_time} | consumes : {delta_mem_str} {colorEnd}"
         self.deep[1] = self.deep[0]
         self._print(toprint, end)
 
@@ -128,13 +128,12 @@ class profiler_collecteur(object):
     def __str__(self):
         ggi = self.get_global_info()
         if self.profData.items() :
-            str = "\n " + "⚡" * 8 
-            str += f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}"
+            str = "\n " + "⚡" * 8
+            str += f" customProfiler log : global timer {ggi['global_run_time']} / memory peack {ggi['memory_peack']:^10}"
+            # str += f"\n ⚡ {'':^45} | {'':7} | {'time':^29} | {'mem. consumption':^17}"
             str += "\n " + "⚡" * 8
-            str += "\n ⚡ {:^45} | {:8} | {:<29} | {:^17}".format("fct name"
-                                                        , "Nb call"
-                                                        , "  time : mean / global"
-                                                        , "mem : max / maxTh")
+            str += (f"\n ⚡ {'fct name':^45} | {'Nb call':7} | " +
+                    f"{'  time : mean / global':<29} | {'mem. max :  Δ / Th':^17}")
             str += "\n ⚡ "+ "="*108
             for key, val in self.profData.items():
                 t_str = htd(val["dt"])
@@ -143,11 +142,11 @@ class profiler_collecteur(object):
                 dp = list(sorted(set(val["deep"])))
                 dp_str = ''.join(["+" if i in dp else "-" for i in range(4)])
 
-                str += f"\n ⚡ {dp_str} {key: ^40.40} | {val['nbCall']:^8} "
+                str += f"\n ⚡ {dp_str} {key: ^40.40} | {val['nbCall']:^7} "
                 str += f"| {t_p_call_str} / {t_str} "
                 strmen = bytes2human(max(val["dm_list"]))
                 strmaxmem = self.__strMaxMemory(key)
-                str += f"| {strmen:>7} / {strmaxmem:>7}"
+                str += f"| {strmen:>7}  / {strmaxmem:>7}"
             str += "\n " + "⚡" * 8
         else :
             str = ("\n " + "⚡" * 2 + f" customProfiler log : global timer {ggi['global_run_time']} / max memory use {ggi['memory_peack']:^10}")
@@ -181,7 +180,7 @@ class profiler_collecteur(object):
                 , forcePrintInCsl = False
                 , noSummaryInLog = False):
         
-        assert interractivity in get_ENUM_list(INTERACTIVITY_OPT_ENUM), f'interractivity {interractivity} must be in INTERACTIVITY_OPT_ENUM : {getEnumList(INTERACTIVITY_OPT_ENUM)}'
+        assert interractivity in get_ENUM_list(INTERACTIVITY_OPT_ENUM), f'interractivity {interractivity} must be in INTERACTIVITY_OPT_ENUM : {get_ENUM_list(INTERACTIVITY_OPT_ENUM)}'
         
         self.interractivity = interractivity
         self.forcePrintInCsl = forcePrintInCsl
@@ -206,8 +205,11 @@ class profiler_collecteur(object):
 
             if not self.noSummaryInLog:
                 def log_end_message():
-                    logSummary = self.__str__().replace('\n ', '\n          ⚡')
-                    self.logger("   ⚡⚡⚡⚡⚡⚡" + logSummary)
+                    logSummary = self.__str__()
+                    logSummary = logSummary.replace('⚡', '  ').replace('\n ', '\n          ⚡:')
+                    logSummary = logSummary.replace('              customProfiler', 'customProfiler')
+                    logSummary = logSummary.splitlines()
+                    self.logger("\n".join(logSummary[:-1]))
                 atexit.register(log_end_message)
         else :
             self.logger = None
