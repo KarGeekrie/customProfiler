@@ -52,12 +52,15 @@ def add_logging_level(levelName, levelNum, methodName=None):
 
 if __name__ == "__main__":
 
+    logging.basicConfig()
+
+    logging.getLogger().setLevel("INFO")
+    logger = logging.getLogger(" ⚡").info
+    logger("test info profiler")
+
     add_logging_level('PROFILER', 25)
-    logging.getLogger().setLevel("PROFILER")  
-    logger = logging.getLogger("⚡")
+    logging.getLogger().setLevel("PROFILER")
+    logger = logging.getLogger(" ⚡").profiler
+    logger("test print profiler")
 
-    ch = logging.StreamHandler()
-    logger.addHandler(ch)
-
-    logger.profiler("test print")
 

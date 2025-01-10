@@ -174,7 +174,7 @@ class profiler_collecteur(object):
 
     def options(self, interractivity = INTERACTIVITY_OPT_ENUM.AUTO
                 , useLogger=False
-                , loggername = " ⚡ "
+                , loggername = " ⚡"
                 , addCustumLvl= True
                 , profilerlvl = 25
                 , forcePrintInCsl = False
@@ -185,7 +185,8 @@ class profiler_collecteur(object):
         self.interractivity = interractivity
         self.forcePrintInCsl = forcePrintInCsl
         self.noSummaryInLog = noSummaryInLog
-        
+        self.loggername = loggername
+
         if interractivity == INTERACTIVITY_OPT_ENUM.AUTO :
             if sys.stdout.isatty():
                 self.interractivity = INTERACTIVITY_OPT_ENUM.ENABLE
@@ -196,17 +197,20 @@ class profiler_collecteur(object):
             if self.interractivity == INTERACTIVITY_OPT_ENUM.ENABLE :
                 self.interractivity = INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC
             if addCustumLvl :
-                add_logging_level('PROFILER', profilerlvl)
-                logging.getLogger().setLevel("PROFILER")  
+                self.lvl = 'PROFILER'
+                add_logging_level(self.lvl, profilerlvl)
+                logging.getLogger().setLevel(self.lvl)  
                 self.logger = logging.getLogger(loggername).profiler
             else :
-                logging.getLogger().setLevel("INFO")  
+                self.lvl = 'INFO'
+                logging.getLogger().setLevel(self.lvl)  
                 self.logger = logging.getLogger(loggername).info
 
             if not self.noSummaryInLog:
                 def log_end_message():
+                    spaceSize = " " * (len(self.lvl) + len(self.loggername))
                     logSummary = self.__str__()
-                    logSummary = logSummary.replace('⚡', '  ').replace('\n ', '\n          ⚡:')
+                    logSummary = logSummary.replace('⚡', '  ').replace('\n ', f'\n{spaceSize}⚡:')
                     logSummary = logSummary.replace('              customProfiler', 'customProfiler')
                     logSummary = logSummary.splitlines()
                     self.logger("\n".join(logSummary[:-1]))

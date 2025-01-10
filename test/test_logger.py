@@ -1,28 +1,32 @@
 import time
 import logging
 
-from custom_profiler import profiler, profiler_lbl, magic_profiler, INTERACTIVITY_OPT_ENUM
+from custom_profiler import profiler, INTERACTIVITY_OPT_ENUM
 from custom_profiler import profiler_collecteur as pc
 
-def test_options(filename='custom_profiler.log', # None = logger in csl ; False = no logger
-                 interractivity = INTERACTIVITY_OPT_ENUM.ENABLE, # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
+def options(filename='custom_profiler.log', # None = logger in csl ; False = logger in file
+                 interractivity = INTERACTIVITY_OPT_ENUM.AUTO, # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
                  loggername = ' ⚡', 
                  addCustumLvl = False):
 
-    useLogger = True if filename != False else False
-
     pc.options(interractivity = interractivity # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
-            , useLogger = useLogger
-            , loggername = loggername
-            , addCustumLvl = addCustumLvl
-            , profilerlvl = 25)
-
-    logger = logging.getLogger(loggername)
+              , useLogger = True
+              , loggername = loggername
+              , addCustumLvl = addCustumLvl
+              , profilerlvl = 25
+              , forcePrintInCsl = False
+              , noSummaryInLog = False)
 
     if filename:
         logging.basicConfig(filename=filename, filemode='w')
     else :
         logging.basicConfig()
+
+    if addCustumLvl :
+        logger = logging.getLogger(loggername).profiler
+    else :
+        logger = logging.getLogger(loggername).info
+    logger(" test logger")
 
     @profiler
     def my_func():
@@ -33,10 +37,25 @@ def test_options(filename='custom_profiler.log', # None = logger in csl ; False 
         time.sleep(2)
         return a
 
-    a = my_func()
-    if useLogger and filename!=None :
-        if addCustumLvl :
-            logger.profiler(pc.__str__())
-        else :
-            logger.info(pc.__str__())
+    my_func()
 
+def test_log_in_csl():
+    options(filename=None # None = logger in csl ; False = no logger
+            , loggername = ' ⚡'
+            , addCustumLvl = True)
+
+def test_log_in_file():
+    options(filename='custom_profiler.log' # None = logger in csl ; False = no logger
+            , loggername = ' ⚡' 
+            , addCustumLvl = False)
+    
+def test_log_in_file_profLvl():
+    options(filename='custom_profiler.log' # None = logger in csl ; False = no logger
+            , loggername = ' ⚡' 
+            , addCustumLvl = True)
+
+if __name__ == "__main__":
+    # test_log_in_csl()
+    # logging.getLogger().handlers.pop()
+    # test_log_in_file()
+    test_log_in_file_profLvl()
