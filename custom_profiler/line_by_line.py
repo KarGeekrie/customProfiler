@@ -15,6 +15,7 @@ profC = profiler_collecteur()
 def trace_lines(frame, event, arg):
 
     code_source, lineStart = inspect.getsourcelines(frame.f_code)
+    current_line = code_source[frame.f_lineno - lineStart].strip()
     co_name  = frame.f_code.co_name
 
     if event != "line":
@@ -26,7 +27,26 @@ def trace_lines(frame, event, arg):
         profC._print( " " + "⚡"*20 + f" line per line : end") 
         return
 
-    profC.__src.append(code_source[frame.f_lineno - lineStart].split('\n')[0])
+    if (current_line in profC.__srcMultiLine or (profC.__last_print_line and frame.f_lineno <= profC.__last_print_line)) :
+            return
+
+    # Check if the current line is part of a continued statement
+    profC.__paren_count += current_line.count('(') - current_line.count(')')
+
+    if profC.__paren_count > 0 :
+        profC.__srcMultiLine.append(current_line)
+        return
+    
+    if current_line.endswith('\\') :
+        current_line = current_line[:-1] + "[...]"
+
+    combined_line = current_line
+    if profC.__srcMultiLine:
+        profC.__srcMultiLine.append(current_line)
+        combined_line = ' '.join(profC.__srcMultiLine)
+        profC.__srcMultiLine = []
+
+    profC.__src.append(combined_line)
 
     if len(profC.__src) == 1 :
         head = code_source[1].split('\n')[0]
@@ -40,12 +60,16 @@ def trace_lines(frame, event, arg):
 
     profC.__tic = time.perf_counter()
     profC.__tic_mem = process.memory_info().rss
+    profC.__last_print_line = frame.f_lineno
 
   
 def trace_calls(frame, event, arg):
     profC.__tic = 0.
     profC.__tic_mem = 0.
     profC.__src = []
+    profC.__srcMultiLine = []
+    profC.__paren_count = 0
+    profC.__last_print_line = None
 
     if event != "call":
         return
@@ -73,3 +97,20 @@ if __name__ == "__main__":
         return a
 
     my_func()
+
+    @lpl
+    def my_func2():
+        a = [1] * (10 ** 6)
+        b = [2] * (2 * 10 ** 7)
+        time.sleep(1)
+        del b
+        a = ([1] * (10 ** 6) +
+            [2] * (2 * 10 ** 7)) + [0] * (
+                1+1 )
+        a =  1 + \
+             2 + \
+                1+1
+        print(a) 
+        return a
+    
+    my_func2()
