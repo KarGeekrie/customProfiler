@@ -266,3 +266,79 @@ PROFILER: ⚡:
           ⚡:   ============================================================================================================
           ⚡:   +---                 my_func                  |    1    |        6.13s  /        6.13s  |    7.9M  /  160.3M
 ```
+
+## Row profiler:
+
+If you don't want any dependencies, simply copy the following code:
+
+```python
+import functools
+import time
+import psutil
+from psutil._common import bytes2human
+process = psutil.Process()
+
+dicoPerf = {}
+
+class magic_profiler():
+    def __init__(self, func_name, dicoPerf):
+        self.name = func_name
+        self.dicoPerf = dicoPerf
+    def __enter__(self):
+        self.start_mem = process.memory_info().rss
+        self.start_time = time.perf_counter()
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        end_time = time.perf_counter()
+        end_mem = process.memory_info().rss
+        nplog = np.array([end_time - self.start_time, end_mem - self.start_mem])
+        if self.name in dicoPerf.keys():
+            self.dicoPerf[self.name] += [nplog]
+        else:
+            self.dicoPerf[self.name] = [nplog]
+        print(f" ⚡ {self.name:20} - time {end_time - self.start_time:7.2f}s - mem {bytes2human(end_mem - self.start_mem):7}")
+
+def magic_decorator(dicoPerf):
+    def decorator(func):
+        name = func.__name__
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start_mem = process.memory_info().rss
+            start_time = time.perf_counter()
+            result = func(*args, **kwargs)
+            end_time = time.perf_counter()
+            end_mem = process.memory_info().rss
+            
+            nplog = np.array([end_time - start_time, end_mem - start_mem])
+            if name in dicoPerf.keys():
+                dicoPerf[name] += [nplog]
+            else:
+                dicoPerf[name] = [nplog]
+            print(f" ⚡ {name:20} - time {end_time - start_time:7.2f}s - mem {bytes2human(end_mem - start_mem):7}")
+            return result
+        return wrapper
+    return decorator
+
+def postProLogPerf(dicoPerf):
+    dicoLog = {}
+    print(" ⚡ Log perf:")
+    for key, value in dicoPerf.items():
+        time_tot = sum([arr[0] for arr in value])
+        time_mean = time_tot / len(value)
+        time_max = max([arr[0] for arr in value])
+
+        mem_max = max([arr[1] for arr in value])
+        dicoLog[key] = {"key": key, "time_tot": time_tot, "time_mean": time_mean, "time_max":time_max, "mem_max": mem_max}
+        print(f" ⚡    * {key:20} - time_tot {time_tot:7.2f}s - time_mean {time_mean:7.2f}s - time_max {time_max:7.2f}s - mem_max {bytes2human(mem_max):7} - nb call {len(value):4}")
+
+with magic_profiler("time.sleep", dicoPerf):
+    time.sleep(2)
+
+@magic_decorator(dicoPerf)
+def dodo():
+    time.sleep(2)
+
+dodo()
+dodo()
+
+postProLogPerf(dicoPerf)
+```
