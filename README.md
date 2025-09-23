@@ -274,11 +274,35 @@ If you don't want any dependencies, simply copy the following code:
 ```python
 import functools
 import time
+import sys
 import psutil
 from psutil._common import bytes2human
+
+if sys.platform == 'linux':
+    import resource
+
 process = psutil.Process()
 
 dicoPerf = {}
+
+class global_info():
+    def __init__(self):
+        self.start_time = time.perf_counter()
+    def info(self):
+        run_time_s = time.perf_counter() - self.start_time
+        if sys.platform == 'win32':
+            mem_peack_b = process.memory_info().peak_wset
+            mem_peack = bytes2human(mem_peack_b)
+        else :
+            mem_peack_b = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 0.0009765625
+            mem_peack = bytes2human(mem_peack_b) # in bytes
+        return {"global_run_time_s": run_time_s, 
+                "memory_peack": mem_peack,
+                "memory_peack_b": mem_peack_b}
+    def __str__(self):
+        info = self.info()
+        return f" ⚡⚡⚡ global_run_time_s {info['global_run_time_s']:7.2f}s - global_memory_peack {info['memory_peack']}"
+gi = global_info()
 
 class magic_profiler():
     def __init__(self, func_name, dicoPerf):
@@ -329,6 +353,10 @@ def postProLogPerf(dicoPerf):
         mem_max = max([arr[1] for arr in value])
         dicoLog[key] = {"key": key, "time_tot": time_tot, "time_mean": time_mean, "time_max":time_max, "mem_max": mem_max}
         print(f" ⚡    * {key:20} - time_tot {time_tot:7.2f}s - time_mean {time_mean:7.2f}s - time_max {time_max:7.2f}s - mem_max {bytes2human(mem_max):7} - nb call {len(value):4}")
+    return dicoLog
+
+#############
+#Use exemple:
 
 with magic_profiler("time.sleep", dicoPerf):
     time.sleep(2)
@@ -341,4 +369,5 @@ dodo()
 dodo()
 
 postProLogPerf(dicoPerf)
+print(gi)
 ```
