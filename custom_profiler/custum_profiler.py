@@ -52,28 +52,31 @@ class thread_mananger:
 def profiler(func, linePerline):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE and linePerline == False:
+        useThread = profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE and linePerline == False
+        if useThread:
             tm = thread_mananger(func.__name__, time.perf_counter(), process.memory_info().rss)
         
         profC.incr()
         start_mem = process.memory_info().rss
         start_time = time.perf_counter()
 
-        if linePerline :
-            sys.settrace(trace_calls)
-        result = func(*args, **kwargs)
-        if linePerline :
-            sys.settrace(None)
+        # everything after the call must run even when it raises, otherwise the
+        # watcher thread leaks and profC.deep never comes back down
+        try :
+            if linePerline :
+                sys.settrace(trace_calls)
+            return func(*args, **kwargs)
+        finally :
+            if linePerline :
+                sys.settrace(None)
 
-        end_time = time.perf_counter()
-        end_mem = process.memory_info().rss
+            end_time = time.perf_counter()
+            end_mem = process.memory_info().rss
 
-        if profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE and linePerline == False :
-            tm.end()
+            if useThread :
+                tm.end()
 
-        profC.save(func.__name__, end_time - start_time, end_mem - start_mem)
-
-        return result
+            profC.save(func.__name__, end_time - start_time, end_mem - start_mem)
     return wrapper
 
 
@@ -83,7 +86,8 @@ class magic_profiler():
         self.func_name = func_name
 
     def __enter__(self):
-        if profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE :
+        self.useThread = profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE
+        if self.useThread :
             self.tm = thread_mananger(self.func_name, time.perf_counter(), process.memory_info().rss)
         profC.incr()
         self.start_mem = process.memory_info().rss
@@ -92,6 +96,6 @@ class magic_profiler():
     def __exit__(self, exc_type, exc_val, exc_tb):
         end_time = time.perf_counter()
         end_mem = process.memory_info().rss
-        if profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE :
+        if self.useThread :
             self.tm.end()
         profC.save(self.func_name, end_time - self.start_time, end_mem - self.start_mem)

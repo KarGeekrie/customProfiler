@@ -91,20 +91,24 @@ leading-comma multi-line argument lists, mixed FR/EN comments.
   purpose; it is not a typo to be "cleaned up".
 * **`profiler_lbl` starts no watcher thread**, so line-by-line mode has no memory-peak
   column (`peak`). The README says so; keep it true.
-* **`line_by_line.py` stores its tracer state on the singleton** as `profC.__tic`,
-  `profC.__src`, `profC.__srcMultiLine`, `profC.__paren_count`, `profC.__last_print_line`.
-  These are module-level functions, so there is **no name mangling** — the attributes are
-  literally named `__tic`, etc. If you ever move this code into a class body, mangling
-  will silently rename them and break everything. `trace_calls` resets that state on
-  every `call` event, so nested/recursive tracing is not supported.
-* **Multi-line statement handling** in `trace_lines` (paren counting, `\` continuation,
-  `__last_print_line` guard) is the subject of commit `7de26d4 "fix nasty bug in
-  line_by_line fct"`. It is delicate — exercise it with the `my_func2` sample in
-  `python custom_profiler/line_by_line.py` (the `__main__` block) before and after a change.
+* **The line tracer keeps its state in `line_by_line.state`**, a module-level
+  `tracer_state` holding the frame being traced, the pending statement and its
+  start/end line. Only the outermost frame is traced: `trace_calls` returns `None`
+  for nested calls, so a Python callee does not clobber the trace.
+* **Never derive a statement's extent from the trace events.** CPython emits one
+  `line` event per statement for a simple multi-line expression, and several
+  out-of-order ones for a complex one — that mismatch is what used to swallow the
+  rest of the function. `get_statement()` reads the continuation lines from the
+  source instead (bracket counting on literal-stripped text, `\` continuation), and
+  `trace_lines` ignores any event landing inside `[state.lineno, state.line_end]`.
+  Exercise both with the `my_func2` sample in
+  `python custom_profiler/line_by_line.py` (the `__main__` block) after any change.
+* **`get_source()` caches `inspect.getsourcelines` per code object.** It used to run
+  on every single line event, which dominated the tracer's own cost.
 * **`bytes2human` is redefined in `collecteur.py`** to handle negative deltas (it wraps
-  `psutil._common.bytes2human` and prepends `-`). `custum_profiler.py` and
-  `line_by_line.py` import the *psutil* one directly, which cannot render negatives.
-  Use the collector's version for anything that can go negative.
+  `psutil._common.bytes2human` and prepends `-`). `custum_profiler.py` imports the
+  *psutil* one directly, which cannot render negatives. Use the collector's version
+  for anything that can go negative.
 * **Platform support.** `import resource` is guarded by `sys.platform == 'linux'`, but
   `get_global_info()` uses it on every non-`win32` platform → `NameError` on macOS.
   Known limitation; only touch it if the task is about platform support.
@@ -209,33 +213,38 @@ interactivity or the summary — `AUTO` takes a different branch in each case.
 
 ---
 
-## 8. Known bugs pinned by the test suite
+## 8. Bug history pinned by the test suite
 
-Each is covered by an `xfail(strict=True)` test. None of them is fixed — do not
-"discover" them again, and if you fix one, drop its marker in the same commit.
+Six bugs were fixed on `fix/known-bugs-and-pyproject`; each keeps a regression test.
+Do not reintroduce them:
 
-1. **`human_time_duration` >= 1 h with a float** — `f"{h:3}"` on a float yields
-   `'2.0h2.0min5.399999999999636s'` (28 chars instead of 12), wrecking the column
-   alignment. Real `perf_counter()` deltas are always floats.
+1. **`human_time_duration` >= 1 h with a float** rendered as
+   `'2.0h2.0min5.399999999999636s'` (28 chars instead of 12). The branch now formats
+   with `{h:3.0f}` — real `perf_counter()` deltas are always floats.
    → `test_human_time.py::test_hours_branch_with_float_input`
-2. **A raising call is never recorded** — `profiler.wrapper` has no `try/finally`.
+2. **A raising call was never recorded** — `profiler.wrapper` now closes over a
+   `try/finally`.
    → `test_profiler_decorator.py::test_raising_call_is_still_recorded`
-3. **`deep[0]` drifts after an exception** — `incr()` is not undone, so every later
-   line is indented one level too deep, permanently.
+3. **`deep[0]` drifted after an exception**, indenting every later line one level too
+   deep, permanently. Same `try/finally`.
    → `test_profiler_decorator.py::test_depth_is_restored_when_the_call_raises`
-4. **The watcher thread leaks after an exception** — `tm.end()` is skipped; the daemon
-   thread keeps writing into `profThread` for the rest of the process.
+4. **The watcher thread leaked after an exception** (`tm.end()` was skipped) and kept
+   writing into `profThread` for the rest of the process. Same `try/finally`, plus
+   `useThread` is now latched at entry instead of re-tested at exit.
    → `test_profiler_decorator.py::test_watcher_thread_is_not_leaked_when_the_call_raises`
-5. **Line-by-line labels drift** — the label comes from the *next* trace event minus
-   one, so a comment or blank line inside the body shifts every following number
-   (the content is right, the number is not).
+5. **Line labels drifted** — they came from the *next* trace event minus one, so a
+   comment or blank line shifted every following number. Each statement now carries
+   its own `f_lineno`.
    → `test_line_by_line.py::test_line_numbers_survive_a_comment_in_the_body`
-6. **A parenthesised multi-line statement swallows the rest of the function** —
-   CPython >= 3.10 emits a single `line` event for the whole statement, so
-   `__paren_count` never returns to 0 and `trace_lines` returns early forever after.
-   Verified on 3.12: a 6-line function reports 1 line.
+6. **A multi-line statement swallowed the rest of the function** — see §3.
    → `test_line_by_line.py::test_multiline_statement_does_not_swallow_the_rest`
 
-Fixing 2-4 is one `try/finally` in `custum_profiler.py`. Fixing 5-6 means reworking
-`trace_lines` around `frame.f_lineno` of the *current* event instead of paren
-counting. Neither is in scope unless asked.
+**Still open**, deliberately (`xfail(strict=True)`):
+
+* **Line mode leaves `profC.deep` far below its baseline** — every per-line `save()`
+  decrements the counter without a matching `incr()`, so `deep[0]` ends at `-4` after
+  a 3-line function and anything profiled afterwards is mis-indented. Any fix changes
+  the depth markers the README's line-by-line summary shows (`----` would become
+  `+---`), so it needs a maintainer decision, not a silent patch.
+  → `test_line_by_line.py::test_line_mode_leaves_the_depth_counter_alone`
+* **`get_global_info()` raises `NameError` on macOS** — see §3.

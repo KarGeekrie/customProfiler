@@ -3,84 +3,156 @@ import time
 import sys
 
 import psutil
-from psutil._common import bytes2human
 process = psutil.Process()
 
 from custom_profiler.collecteur import profiler_collecteur
-from custom_profiler.human_readable_time import human_time_duration as htd
 
 profC = profiler_collecteur()
 
 
+_source_cache = {}
+
+
+def get_source(code):
+    """inspect.getsourcelines() is far too slow to call on every line event."""
+    if code not in _source_cache:
+        try:
+            _source_cache[code] = inspect.getsourcelines(code)
+        except (OSError, TypeError):
+            _source_cache[code] = ([], 0)
+    return _source_cache[code]
+
+
+def strip_literals(line):
+    """Drop string contents and comments, so brackets can be counted safely."""
+    out = []
+    quote = None
+    i = 0
+    while i < len(line):
+        char = line[i]
+        if quote:
+            if char == "\\":
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "#":
+            break
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out)
+
+
+def get_statement(code, lineno):
+    """Source of the statement starting at `lineno`, and its last line number.
+
+    The continuation lines of a multi-line statement are read from the source
+    rather than waited for: CPython may emit a single "line" event for the whole
+    statement, or several out-of-order ones, so they cannot be counted from the
+    trace events themselves.
+    """
+    code_source, lineStart = get_source(code)
+    idx = lineno - lineStart
+    if idx < 0 or idx >= len(code_source):
+        return "", lineno
+
+    src = []
+    paren_count = 0
+    backslash = False
+    while idx < len(code_source):
+        current_line = code_source[idx].strip()
+        continued = current_line.endswith('\\')
+        if continued:
+            current_line = current_line[:-1] + "[...]"
+        if not backslash:
+            src.append(current_line)
+
+        clean = strip_literals(current_line)
+        paren_count += (clean.count('(') + clean.count('[') + clean.count('{')
+                        - clean.count(')') - clean.count(']') - clean.count('}'))
+        if continued:
+            backslash = True
+        elif paren_count <= 0:
+            break
+        idx += 1
+    return ' '.join(src), lineStart + idx
+
+
+class tracer_state(object):
+    """State of the line tracer. Only one frame is traced at a time."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.frame = None
+        self.co_name = ""
+        self.lineno = None
+        self.line_end = None
+        self.statement = ""
+        self.tic = 0.
+        self.tic_mem = 0
+
+
+state = tracer_state()
+
+
+def save_line(frame):
+    t   = time.perf_counter() - state.tic
+    men = process.memory_info().rss - state.tic_mem
+    fname     = f"l {state.lineno:<3} {state.statement:40}"
+    fnameSave = f"{state.co_name} l {state.lineno:<3}"
+    profC.save(fnameSave, t, men, fname)
+
+
 def trace_lines(frame, event, arg):
 
-    code_source, lineStart = inspect.getsourcelines(frame.f_code)
-    current_line = code_source[frame.f_lineno - lineStart].strip()
-    co_name  = frame.f_code.co_name
+    if event == "line":
+        if state.lineno is not None and state.lineno <= frame.f_lineno <= state.line_end:
+            return trace_lines  # still running the same multi-line statement
 
-    if event != "line":
-        fname = f"l {frame.f_lineno:<3} {profC.__src[-1]:40}"
-        fnameSave  = f"{co_name} l {frame.f_lineno:<3}"
-        t     = time.perf_counter() - profC.__tic
-        men   = process.memory_info().rss - profC.__tic_mem
-        profC.save(fnameSave, t, men, fname)
-        profC._print( " " + "⚡"*20 + f" line per line : end") 
-        return
+        if state.lineno is None:
+            profC._print(" " + "⚡"*20 + f" line per line : {state.co_name} from {frame.f_code.co_filename}")
+        else:
+            save_line(frame)
 
-    if (current_line in profC.__srcMultiLine or (profC.__last_print_line and frame.f_lineno <= profC.__last_print_line)) :
-            return
+        state.lineno = frame.f_lineno
+        state.statement, state.line_end = get_statement(frame.f_code, frame.f_lineno)
+        state.tic = time.perf_counter()
+        state.tic_mem = process.memory_info().rss
 
-    # Check if the current line is part of a continued statement
-    profC.__paren_count += current_line.count('(') - current_line.count(')')
+    elif event == "return":
+        if state.lineno is not None:
+            save_line(frame)
+            profC._print(" " + "⚡"*20 + f" line per line : end")
+        state.reset()
 
-    if profC.__paren_count > 0 :
-        profC.__srcMultiLine.append(current_line)
-        return
-    
-    if current_line.endswith('\\') :
-        current_line = current_line[:-1] + "[...]"
+    # "exception" events do not end a statement (think try/except): ignore them
+    return trace_lines
 
-    combined_line = current_line
-    if profC.__srcMultiLine:
-        profC.__srcMultiLine.append(current_line)
-        combined_line = ' '.join(profC.__srcMultiLine)
-        profC.__srcMultiLine = []
 
-    profC.__src.append(combined_line)
-
-    if len(profC.__src) == 1 :
-        head = code_source[1].split('\n')[0]
-        profC._print( " " + "⚡"*20 + f" line per line : {head.split()[1].split('(')[0]} from {frame.f_code.co_filename}") 
-    else :
-        fname  = f"l {frame.f_lineno-1:<3} {profC.__src[-2]:40}"
-        fnameSave  = f"{co_name} l {frame.f_lineno-1:<3}"
-        t  = time.perf_counter() - profC.__tic
-        men = process.memory_info().rss - profC.__tic_mem
-        profC.save(fnameSave, t, men, fname)
-
-    profC.__tic = time.perf_counter()
-    profC.__tic_mem = process.memory_info().rss
-    profC.__last_print_line = frame.f_lineno
-
-  
 def trace_calls(frame, event, arg):
-    profC.__tic = 0.
-    profC.__tic_mem = 0.
-    profC.__src = []
-    profC.__srcMultiLine = []
-    profC.__paren_count = 0
-    profC.__last_print_line = None
-
     if event != "call":
         return
+    if state.frame is not None:
+        return  # a nested call: only the decorated function is traced
+
+    state.reset()
+    state.frame = frame
+    state.co_name = frame.f_code.co_name
     return trace_lines
 
 
 def lpl(fonction):
     def wrapper(*args, **kwargs):
         sys.settrace(trace_calls)
-        resultat = fonction(*args, **kwargs)
-        sys.settrace(None)
+        try:
+            resultat = fonction(*args, **kwargs)
+        finally:
+            sys.settrace(None)
         return resultat
     return wrapper
 

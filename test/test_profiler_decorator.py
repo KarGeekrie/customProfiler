@@ -152,10 +152,6 @@ def test_exception_propagates(pc, capsys):
     capsys.readouterr()
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug: profiler.wrapper has no try/finally, so a raising call is "
-    "never recorded"
-))
 def test_raising_call_is_still_recorded(pc, capsys):
     pc.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
 
@@ -169,10 +165,6 @@ def test_raising_call_is_still_recorded(pc, capsys):
     assert pc["boom"]["nb_call"] == 1
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug: incr() is never undone when the call raises, so deep[0] drifts "
-    "and every later line is indented one level too deep"
-))
 def test_depth_is_restored_when_the_call_raises(pc, capsys):
     pc.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
 
@@ -187,10 +179,6 @@ def test_depth_is_restored_when_the_call_raises(pc, capsys):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug: tm.end() is skipped when the call raises, leaking one daemon "
-    "watcher thread that keeps writing into profThread forever"
-))
 def test_watcher_thread_is_not_leaked_when_the_call_raises(run_py):
     """Run out-of-process: a leaked watcher would pollute every later test."""
     out = run_py(
