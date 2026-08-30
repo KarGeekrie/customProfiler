@@ -1,8 +1,8 @@
-"""`options()` and the INTERACTIVITY_OPT_ENUM branches."""
+"""`options()`, the Interactivity branches, and the legacy keyword aliases."""
 
 import pytest
 
-from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+from custom_profiler.collecteur import Interactivity
 
 from conftest import requires_pty
 
@@ -11,27 +11,57 @@ pytestmark = pytest.mark.slow
 
 @pytest.mark.parametrize("value", ["ENABLE", "MF_NO_INTERAC", "DISABLE"])
 def test_explicit_values_are_kept(pc, value):
-    pc.options(interractivity=value)
+    pc.options(interactivity=value)
     assert pc.interractivity == value
 
 
 def test_invalid_value_is_rejected(pc):
-    with pytest.raises(AssertionError, match="INTERACTIVITY_OPT_ENUM"):
-        pc.options(interractivity="LOUD")
+    with pytest.raises(AssertionError, match="Interactivity"):
+        pc.options(interactivity="LOUD")
 
 
-def test_options_resets_what_you_do_not_pass(pc):
-    """Documented gotcha: every keyword has a default, so a partial call resets."""
-    pc.options(interractivity=INTERACTIVITY_OPT_ENUM.DISABLE, forcePrintInCsl=True)
+def test_unknown_keyword_is_rejected(pc):
+    with pytest.raises(TypeError, match="nonsense"):
+        pc.options(nonsense=True)
+
+
+def test_options_keeps_what_you_do_not_pass(pc):
+    """A partial call means "change only this", not "reset the rest"."""
+    pc.options(interactivity=Interactivity.DISABLE, force_print_in_console=True)
     assert pc.forcePrintInCsl is True
 
-    pc.options(interractivity=INTERACTIVITY_OPT_ENUM.DISABLE)
-    assert pc.forcePrintInCsl is False
+    pc.options(no_summary_in_log=True)
+    assert pc.forcePrintInCsl is True
+    assert pc.interractivity == Interactivity.DISABLE
 
 
-def test_useLogger_false_clears_the_logger(pc):
+def test_the_interactivity_attribute_has_a_correct_alias(pc):
+    pc.options(interactivity=Interactivity.DISABLE)
+    assert pc.interactivity == Interactivity.DISABLE
+    pc.interactivity = Interactivity.MF_NO_INTERAC
+    assert pc.interractivity == Interactivity.MF_NO_INTERAC
+
+
+@pytest.mark.parametrize("old, new, value", [
+    ("interractivity", "interactivity", "DISABLE"),
+    ("forcePrintInCsl", "force_print_in_console", True),
+    ("noSummaryInLog", "no_summary_in_log", True),
+    ("loggername", "logger_name", "x"),
+])
+def test_legacy_keywords_still_work_and_warn(pc, old, new, value):
+    with pytest.warns(DeprecationWarning, match=old):
+        pc.options(**{old: value})
+
+    attr = {"interactivity": "interractivity",
+            "force_print_in_console": "forcePrintInCsl",
+            "no_summary_in_log": "noSummaryInLog",
+            "logger_name": "loggername"}[new]
+    assert getattr(pc, attr) == value
+
+
+def test_use_logger_false_clears_the_logger(pc):
     pc.logger = print
-    pc.options(interractivity=INTERACTIVITY_OPT_ENUM.DISABLE, useLogger=False)
+    pc.options(use_logger=False)
     assert pc.logger is None
 
 
@@ -39,8 +69,8 @@ def test_auto_without_a_tty_disables_interactive_printing(run_py):
     out = run_py(
         """
         from custom_profiler import profiler_collecteur as pc
-        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
-        pc.options(interractivity=INTERACTIVITY_OPT_ENUM.AUTO)
+        from custom_profiler.collecteur import Interactivity
+        pc.options(interactivity=Interactivity.AUTO)
         print("MODE", pc.interractivity)
         """
     )
@@ -52,8 +82,8 @@ def test_auto_on_a_tty_enables_interactive_printing(run_py):
     out = run_py(
         """
         from custom_profiler import profiler_collecteur as pc
-        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
-        pc.options(interractivity=INTERACTIVITY_OPT_ENUM.AUTO)
+        from custom_profiler.collecteur import Interactivity
+        pc.options(interactivity=Interactivity.AUTO)
         print("MODE", pc.interractivity)
         """,
         tty=True,
@@ -82,9 +112,9 @@ def test_interactive_mode_refreshes_in_place(run_py):
         import time
         from custom_profiler import profiler
         from custom_profiler import profiler_collecteur as pc
-        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+        from custom_profiler.collecteur import Interactivity
 
-        pc.options(interractivity=INTERACTIVITY_OPT_ENUM.ENABLE)
+        pc.options(interactivity=Interactivity.ENABLE)
 
         @profiler
         def my_func():
@@ -99,32 +129,32 @@ def test_interactive_mode_refreshes_in_place(run_py):
     assert "my_func" in out
 
 
-def test_useLogger_downgrades_enable_to_mf_no_interac(run_py):
+def test_use_logger_downgrades_enable_to_mf_no_interac(run_py):
     out = run_py(
         """
         import logging
         from custom_profiler import profiler_collecteur as pc
-        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+        from custom_profiler.collecteur import Interactivity
 
         logging.basicConfig(filename="out.log", filemode="w")
-        pc.options(interractivity=INTERACTIVITY_OPT_ENUM.ENABLE, useLogger=True)
+        pc.options(interactivity=Interactivity.ENABLE, use_logger=True)
         print("MODE", pc.interractivity)
         """
     )
     assert "MODE MF_NO_INTERAC" in out
 
 
-def test_custom_level_can_only_be_added_once(run_py):
-    """add_logging_level() clobber-guards itself; a second call raises."""
+def test_configuring_the_logger_twice_is_idempotent(run_py):
+    """add_logging_level() raises if called twice; options() must not let it."""
     out = run_py(
         """
         import logging
         from custom_profiler import profiler_collecteur as pc
-        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+        from custom_profiler.collecteur import Interactivity
 
         logging.basicConfig(filename="out.log", filemode="w")
-        opts = dict(interractivity=INTERACTIVITY_OPT_ENUM.DISABLE,
-                    useLogger=True, addCustumLvl=True)
+        opts = dict(interactivity=Interactivity.DISABLE,
+                    use_logger=True, add_custom_level=True)
         pc.options(**opts)
         try:
             pc.options(**opts)
@@ -133,5 +163,4 @@ def test_custom_level_can_only_be_added_once(run_py):
             print("SECOND AttributeError", err)
         """
     )
-    assert "SECOND AttributeError" in out
-    assert "PROFILER already defined" in out
+    assert "SECOND ok" in out

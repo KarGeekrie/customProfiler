@@ -12,16 +12,16 @@ PROFILED = """
     import logging
     from custom_profiler import profiler
     from custom_profiler import profiler_collecteur as pc
-    from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+    from custom_profiler.collecteur import Interactivity
 
     logging.basicConfig(filename="out.log", filemode="w")
-    pc.options(interractivity=INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC,
-               useLogger=True,
-               loggername=" ⚡",
-               addCustumLvl={addCustumLvl},
-               profilerlvl=25,
-               forcePrintInCsl={forcePrintInCsl},
-               noSummaryInLog={noSummaryInLog})
+    pc.options(interactivity=Interactivity.MF_NO_INTERAC,
+               use_logger=True,
+               logger_name=" ⚡",
+               add_custom_level={add_custom_level},
+               profiler_level=25,
+               force_print_in_console={force_print_in_console},
+               no_summary_in_log={no_summary_in_log})
 
     @profiler
     def my_func():
@@ -34,11 +34,11 @@ PROFILED = """
 
 @pytest.fixture
 def run_logged(run_py, tmp_path):
-    def _run(addCustumLvl=True, forcePrintInCsl=False, noSummaryInLog=False):
+    def _run(add_custom_level=True, force_print_in_console=False, no_summary_in_log=False):
         stdout = run_py(PROFILED.format(
-            addCustumLvl=addCustumLvl,
-            forcePrintInCsl=forcePrintInCsl,
-            noSummaryInLog=noSummaryInLog,
+            add_custom_level=add_custom_level,
+            force_print_in_console=force_print_in_console,
+            no_summary_in_log=no_summary_in_log,
         ))
         return stdout, (tmp_path / "out.log").read_text(encoding="utf-8")
 
@@ -46,13 +46,13 @@ def run_logged(run_py, tmp_path):
 
 
 def test_custom_level_is_used(run_logged):
-    _, log = run_logged(addCustumLvl=True)
+    _, log = run_logged(add_custom_level=True)
     assert "PROFILER" in log
     assert "my_func" in log
 
 
 def test_without_custom_level_it_falls_back_to_info(run_logged):
-    _, log = run_logged(addCustumLvl=False)
+    _, log = run_logged(add_custom_level=False)
     assert "INFO" in log
     assert "PROFILER" not in log
     assert "my_func" in log
@@ -64,26 +64,26 @@ def test_logger_name_prefixes_every_record(run_logged):
 
 
 def test_summary_is_appended_at_exit(run_logged):
-    _, log = run_logged(noSummaryInLog=False)
+    _, log = run_logged(no_summary_in_log=False)
     assert "customProfiler log" in log
     assert "fct name" in log
     assert "=" * 108 in log
 
 
 def test_no_summary_in_log_suppresses_it(run_logged):
-    _, log = run_logged(noSummaryInLog=True)
+    _, log = run_logged(no_summary_in_log=True)
     assert "my_func" in log
     assert "fct name" not in log
 
 
 def test_logger_silences_the_console(run_logged):
-    stdout, log = run_logged(forcePrintInCsl=False)
+    stdout, log = run_logged(force_print_in_console=False)
     assert "my_func" in log
     assert "my_func" not in stdout
 
 
 def test_force_print_in_csl_keeps_both(run_logged):
-    stdout, log = run_logged(forcePrintInCsl=True)
+    stdout, log = run_logged(force_print_in_console=True)
     assert "my_func" in log
     assert "my_func" in stdout
 
@@ -94,9 +94,9 @@ def test_summary_is_printed_at_exit_without_a_logger(run_py):
         """
         from custom_profiler import profiler
         from custom_profiler import profiler_collecteur as pc
-        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+        from custom_profiler.collecteur import Interactivity
 
-        pc.options(interractivity=INTERACTIVITY_OPT_ENUM.DISABLE)
+        pc.options(interactivity=Interactivity.DISABLE)
 
         @profiler
         def my_func():

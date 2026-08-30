@@ -1,0 +1,150 @@
+import os
+import sys
+import time
+
+from functools import wraps
+
+import threading
+from threading import Thread
+from threading import Event
+
+import psutil
+process = psutil.Process()
+
+from custom_profiler import line_by_line
+from custom_profiler.line_by_line import trace_calls
+from custom_profiler.collecteur import profiler_collecteur, Interactivity, bytes2human
+from custom_profiler.human_readable_time import human_time_duration as htd
+
+
+profC = profiler_collecteur()
+
+
+# CUSTOM_PROFILER=0 removes the decorators entirely, so a library can ship
+# profiled code that costs nothing in production
+_OFF_VALUES = ("0", "false", "no", "off")
+DISABLED = os.environ.get("CUSTOM_PROFILER", "").strip().lower() in _OFF_VALUES
+
+
+POLL_S    = 0.01  # how often the watcher wakes up
+REFRESH_S = 1.    # how often it samples memory and repaints the interactive line
+
+
+def task(event, fname, start_time, start_mem):
+    next_refresh = time.perf_counter() + REFRESH_S
+    while True :
+        time.sleep(POLL_S)
+        now = time.perf_counter()
+        if now >= next_refresh :
+            next_refresh = now + REFRESH_S
+            t_str = htd(now - start_time)
+            dm = process.memory_info().rss - start_mem
+            profC.thread_view(fname, dm) #sauvegarde delta mem max
+            strmen = bytes2human(dm)
+            if profC.interractivity == Interactivity.ENABLE :
+                if threading.active_count() < 3:
+                    profC.print_line(fname, t_str, strmen, end="\r", color="\033[93m")
+
+        if event.is_set():
+            break
+
+
+class _ThreadManager:
+    def __init__(self, fname, start_time, start_mem):
+        self.event = Event()
+        self.t = Thread(target=task, args=(self.event, fname, start_time, start_mem))
+        self.t.daemon = True
+        self.t.start()
+
+    def end(self):
+        self.event.set()
+        self.t.join()
+
+
+thread_mananger = _ThreadManager  # deprecated spelling, removed in 2.0
+
+
+#https://stackoverflow.com/questions/5929107/decorators-with-parameters
+def profiler(func=None, *, name=None, linePerline=False):
+    """Profile a function.
+
+    Usable bare (``@profiler``) or called (``@profiler(name="my label")``).
+    """
+    def decorate(fct):
+        if DISABLED :
+            return fct
+        return _wrap(fct, name or fct.__name__, linePerline)
+
+    if func is None :
+        return decorate
+    return decorate(func)
+
+
+def _wrap(func, fname, linePerline):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if profC.interractivity == Interactivity.OFF :
+            return func(*args, **kwargs)
+
+        # a recursive call is timed by its outermost frame only: adding the inner
+        # frames would count the same seconds several times over
+        outermost = profC.incr(fname)
+        useThread = (profC.interractivity != Interactivity.DISABLE
+                     and linePerline == False and outermost)
+        if useThread:
+            tm = _ThreadManager(fname, time.perf_counter(), process.memory_info().rss)
+
+        start_mem = process.memory_info().rss
+        start_time = time.perf_counter()
+
+        # everything after the call must run even when it raises, otherwise the
+        # watcher thread leaks and profC.deep never comes back down
+        try :
+            if linePerline :
+                line_by_line.set_pending_label(fname)
+                sys.settrace(trace_calls)
+            return func(*args, **kwargs)
+        finally :
+            if linePerline :
+                sys.settrace(None)
+                line_by_line.set_pending_label(None)
+
+            end_time = time.perf_counter()
+            end_mem = process.memory_info().rss
+
+            if useThread :
+                tm.end()
+
+            profC.save(fname, end_time - start_time, end_mem - start_mem,
+                       outermost=outermost)
+    return wrapper
+
+
+class magic_profiler():
+
+    def __init__(self, func_name):
+        self.func_name = func_name
+        self.disabled = True
+
+    def __enter__(self):
+        self.disabled = DISABLED or profC.interractivity == Interactivity.OFF
+        if self.disabled :
+            return
+
+        self.outermost = profC.incr(self.func_name)
+        self.useThread = profC.interractivity != Interactivity.DISABLE and self.outermost
+        if self.useThread :
+            self.tm = _ThreadManager(self.func_name, time.perf_counter(), process.memory_info().rss)
+        self.start_mem = process.memory_info().rss
+        self.start_time = time.perf_counter()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.disabled :
+            return
+
+        end_time = time.perf_counter()
+        end_mem = process.memory_info().rss
+        if self.useThread :
+            self.tm.end()
+        profC.save(self.func_name, end_time - self.start_time, end_mem - self.start_mem,
+                   outermost=self.outermost)

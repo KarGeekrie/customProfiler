@@ -99,6 +99,15 @@ class tracer_state(object):
 
 state = tracer_state()
 
+# label the enclosing @profiler_lbl was given, so the per-line entries carry the
+# same name as the function entry
+pending_label = None
+
+
+def set_pending_label(label):
+    global pending_label
+    pending_label = label
+
 
 def save_line(frame):
     t   = time.perf_counter() - state.tic
@@ -144,7 +153,7 @@ def trace_calls(frame, event, arg):
 
     state.reset()
     state.frame = frame
-    state.co_name = frame.f_code.co_name
+    state.co_name = pending_label or frame.f_code.co_name
     return trace_lines
 
 

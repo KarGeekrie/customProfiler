@@ -50,7 +50,7 @@ Your log :
  ⚡ my_func                                       | takes :        4.15s  | consumes :  Δ    7.6M / peak  160.2M
  ⚡ my_func                                       | takes :        4.16s  | consumes :  Δ    7.6M / peak  160.2M
 
- ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer       12.49s  / memory peack   190.1M
+ ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer       12.49s  / memory peak   190.1M
  ⚡⚡⚡⚡⚡⚡⚡⚡
  ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
  ⚡ ============================================================================================================
@@ -91,7 +91,7 @@ Your log :
  ⚡   ┌─big list                                  | takes :       65.92ms | consumes :  Δ  160.1M / peak  160.1M
  ⚡ my_func                                       | takes :        4.14s  | consumes :  Δ    7.7M / peak  160.1M
 
- ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        7.31s  / memory peack   182.6M
+ ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        7.31s  / memory peak   182.6M
  ⚡⚡⚡⚡⚡⚡⚡⚡
  ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
  ⚡ ============================================================================================================
@@ -107,8 +107,9 @@ You cannot access profiler data by requesting it from `profiler_collecteur["my_f
 * *nb_call*: number of times the function is called
 * *global_time* / *global_time_s*: total time spent in the function (as a string or in seconds)
 * *mean_time* / *mean_time_s*: mean time spent in the function (= global_time / nb_call)
-* *max_memory* / *max_memory_b*: maximum memory used by the function (as a string or a list of memory consumed for each call in bytes)
-* peak_memory / *peak_memory_b*: similar to max_memory, but provides access to thread data. Threads can detect memory peaks during the function execution. *max_memory* only computes the delta memory between the start and end of the function.
+* *max_memory* / *max_memory_b*: maximum memory used by the function (as a string or in bytes)
+* *per_call_memory_b*: the memory consumed by each individual call, in bytes
+* *peak_memory* / *peak_memory_b*: similar to max_memory, but provides access to thread data. Threads can detect memory peaks during the function execution. *max_memory* only computes the delta memory between the start and end of the function.
 
 Global data is also available with `profiler_collecteur.get_global_info()`:
 * *global_run_time* / *global_run_time_s*: global time since `import custom_profiler` (as a string or in seconds)
@@ -138,17 +139,18 @@ Your log :
     {'global_time': '       3.43s ',
     'global_time_s': 3.430555187000209,
     'max_memory': '7.9M',
-    'max_memory_b': [8265728],
+    'max_memory_b': 8265728,
     'mean_time': '       3.43s ',
     'mean_time_s': 3.430555187000209,
     'nb_call': 1,
-    'peack_memory': '160.5M',
-    'peack_memory_b': 168267776}
+    'peak_memory': '160.5M',
+    'peak_memory_b': 168267776,
+    'per_call_memory_b': [8265728]}
 >>> pprint.pprint(pc.get_global_info())
     {'global_run_time': '       5.43s ',
     'global_run_time_s': 5.433014978999836,
-    'memory_peack': '174.5M',
-    'memory_peack_b': 182996992.0}
+    'memory_peak': '174.5M',
+    'memory_peak_b': 182996992.0}
 [...]
 ```
 
@@ -183,7 +185,7 @@ Your log :
  ⚡ ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡ line per line : end
  ⚡ my_func                                       | takes :        4.14s  | consumes :  Δ    8.1M
 
- ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        4.15s  / memory peack   175.1M
+ ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        4.15s  / memory peak   175.1M
  ⚡⚡⚡⚡⚡⚡⚡⚡
  ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
  ⚡ ============================================================================================================
@@ -202,20 +204,27 @@ Your log :
 The profiler uses thread to monitor memory evolution and offert interactive report (follow time and memory). Thread options are :
 
 ```python
-class INTERACTIVITY_OPT_ENUM :
+class Interactivity(str, Enum) :
     ENABLE        = "ENABLE"        # thread (for memory peak follow) and interactive print
-    MF_NO_INTERAC = "MF_NO_INTERAC" # memory peak follow (with thread), no interacrtif print
-    DISABLE       = "DISABLE"       # no thread, no memory peak follow, no interacrtif print
-    AUTO          = "AUTO"          # if console is redirect in file (sys.stdout.isatty() == false) AUTO is equivalente to MF_NO_INTERAC else is equivalente to ENABLE
+    MF_NO_INTERAC = "MF_NO_INTERAC" # memory peak follow (with thread), no interactive print
+    DISABLE       = "DISABLE"       # no thread, no memory peak follow, no interactive print
+    AUTO          = "AUTO"          # if the console is redirected (sys.stdout.isatty() == False) AUTO means MF_NO_INTERAC, else ENABLE
+    OFF           = "OFF"           # record nothing at all
 ```
 
+Setting `CUSTOM_PROFILER=0` in the environment removes the decorators entirely, so
+profiled code costs nothing in production.
+
 The other options allow you to activate a logger :
-* *useLogger* : put log in a logger, default : *False*
-* *loggername* : name of logger, if useLogger set at True, default : " ⚡"
-* *addCustumLvl* : add new logging level call *PROFILER* at level *profilerlvl*. Log is put in *INFO" is addCustumLvl is *False*
-* *profilerlvl* : logging level, default : *25*
-* *forcePrintInCsl* : if the logger is enabled, force print in the console and in the logger. Default: False
-* *noSummaryInLog* : if the logger is enabled, disable the profiler summary in the logger. Default: False
+* *use_logger* : put log in a logger, default : *False*
+* *logger_name* : name of logger, if use_logger set at True, default : " ⚡"
+* *add_custom_level* : add new logging level call *PROFILER* at level *profiler_level*. Log is put in *INFO* if add_custom_level is *False*
+* *profiler_level* : logging level, default : *25*
+* *force_print_in_console* : if the logger is enabled, force print in the console and in the logger. Default: False
+* *no_summary_in_log* : if the logger is enabled, disable the profiler summary in the logger. Default: False
+
+`options()` only changes what you pass it: a partial call leaves every other option
+alone.
 
 This example illustrates the loading of options in the profiler :
 
@@ -223,18 +232,18 @@ This example illustrates the loading of options in the profiler :
 import time
 import logging
 
-from custom_profiler import profiler, INTERACTIVITY_OPT_ENUM
+from custom_profiler import profiler, Interactivity
 from custom_profiler import profiler_collecteur as pc
 
 logging.basicConfig(filename="demologger.txt", filemode='w')
 
-pc.options(interractivity = INTERACTIVITY_OPT_ENUM.AUTO # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
-           , useLogger = True
-           , loggername = " ⚡"
-           , addCustumLvl = True
-           , profilerlvl = 25
-           , forcePrintInCsl = True
-           , noSummaryInLog = False)
+pc.options(interactivity = Interactivity.AUTO # ENABLE / MF_NO_INTERAC / DISABLE / AUTO / OFF
+           , use_logger = True
+           , logger_name = " ⚡"
+           , add_custom_level = True
+           , profiler_level = 25
+           , force_print_in_console = True
+           , no_summary_in_log = False)
 
 #[... run your code to profil...]
 @profiler
@@ -253,7 +262,7 @@ Your bash log :
 ```bash
  ⚡ my_func                                       | takes :        6.13s  | consumes :  Δ    7.9M / peak  160.5M
 
- ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        6.16s  / memory peack   174.8M
+ ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        6.16s  / memory peak   174.8M
  ⚡⚡⚡⚡⚡⚡⚡⚡
  ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
  ⚡ ============================================================================================================
@@ -265,7 +274,7 @@ Your log in file *demologger.txt* :
 ```bash
 PROFILER: ⚡:   my_func                                       | takes :        6.13s  | consumes :  Δ    7.9M / peak  160.3M
 PROFILER: ⚡:
-          ⚡:   customProfiler log : global timer        6.13s  / memory peack   175.3M
+          ⚡:   customProfiler log : global timer        6.13s  / memory peak   175.3M
           ⚡:
           ⚡:                     fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
           ⚡:   ============================================================================================================
@@ -283,7 +292,7 @@ import sys
 import psutil
 from psutil._common import bytes2human
 
-if sys.platform == 'linux':
+if sys.platform != 'win32':
     import resource
 
 process = psutil.Process()
@@ -296,17 +305,18 @@ class global_info():
     def info(self):
         run_time_s = time.perf_counter() - self.start_time
         if sys.platform == 'win32':
-            mem_peack_b = process.memory_info().peak_wset
-            mem_peack = bytes2human(mem_peack_b)
+            mem_peak_b = process.memory_info().peak_wset
         else :
-            mem_peack_b = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 0.0009765625
-            mem_peack = bytes2human(mem_peack_b) # in bytes
+            # ru_maxrss is in kibibytes on Linux and in bytes on macOS/BSD
+            unit = 1 if sys.platform == 'darwin' else 1024
+            mem_peak_b = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * unit
+        mem_peak = bytes2human(mem_peak_b)
         return {"global_run_time_s": run_time_s, 
-                "memory_peack": mem_peack,
-                "memory_peack_b": mem_peack_b}
+                "memory_peak": mem_peak,
+                "memory_peak_b": mem_peak_b}
     def __str__(self):
         info = self.info()
-        return f" ⚡⚡⚡ global_run_time_s {info['global_run_time_s']:7.2f}s - global_memory_peack {info['memory_peack']}"
+        return f" ⚡⚡⚡ global_run_time_s {info['global_run_time_s']:7.2f}s - global_memory_peak {info['memory_peak']}"
 gi = global_info()
 
 class magic_profiler():
@@ -319,7 +329,7 @@ class magic_profiler():
     def __exit__(self, exc_type, exc_val, exc_tb):
         end_time = time.perf_counter()
         end_mem = process.memory_info().rss
-        nplog = np.array([end_time - self.start_time, end_mem - self.start_mem])
+        nplog = (end_time - self.start_time, end_mem - self.start_mem)
         if self.name in dicoPerf.keys():
             self.dicoPerf[self.name] += [nplog]
         else:
@@ -337,7 +347,7 @@ def magic_decorator(dicoPerf):
             end_time = time.perf_counter()
             end_mem = process.memory_info().rss
             
-            nplog = np.array([end_time - start_time, end_mem - start_mem])
+            nplog = (end_time - start_time, end_mem - start_mem)
             if name in dicoPerf.keys():
                 dicoPerf[name] += [nplog]
             else:

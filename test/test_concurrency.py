@@ -8,12 +8,12 @@ import time
 import pytest
 
 from custom_profiler import magic_profiler, profiler
-from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+from custom_profiler.collecteur import Interactivity
 
 
 @pytest.fixture(autouse=True)
 def quiet(pc, capsys):
-    pc.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
+    pc.interractivity = Interactivity.DISABLE
     yield
     capsys.readouterr()
 
@@ -145,7 +145,7 @@ def test_a_second_top_level_call_is_still_timed(pc):
     data = pc["once"]
     assert data["nb_call"] == 2
     assert data["global_time_s"] == pytest.approx(0.04, abs=0.05)
-    assert len(data["max_memory_b"]) == 2
+    assert len(data["per_call_memory_b"]) == 2
 
 
 def test_mutual_recursion_is_timed_per_name(pc):

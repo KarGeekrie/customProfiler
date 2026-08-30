@@ -23,6 +23,9 @@ Source = "https://github.com/KarGeekrie/customProfiler"
 [tool.setuptools.packages.find]
 include = ["custom_profiler*"]
 
+[tool.setuptools.package-data]
+custom_profiler = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["test"]
 norecursedirs = ["test/demo", ".venv", "build", "dist", "*.egg-info"]
