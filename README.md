@@ -2,7 +2,7 @@
 
 **custom_profiler** is a simple, interactive and lightweight (the only dependency is psutil) way of profiling the memory and execution time of your python code.
 
-<p align="center"><img src="/gif/demoProf.gif?raw=true"/></p>
+<p align="center"><img src="https://raw.githubusercontent.com/KarGeekrie/customProfiler/main/gif/demoProf.gif"/></p>
 
 ## Installation :
 

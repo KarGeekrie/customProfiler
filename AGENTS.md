@@ -21,7 +21,8 @@ the sources.
 | `custom_profiler/human_readable_time.py` | `human_time_duration()` (aliased `htd`) — fixed-width time strings. |
 | `test/` | Automated `pytest` suite (see §6). |
 | `test/demo/` | Runnable snippets backing the README's output blocks — printed, not asserted; excluded from collection. |
-| `pytest.ini` | Test config: `testpaths=test`, `test/demo` excluded, `slow` marker. |
+| `pyproject.toml` | **The** packaging file (PEP 621, setuptools backend) — and the pytest config (`[tool.pytest.ini_options]`). |
+| `MANIFEST.in` | Ships the test tree in the sdist. |
 | `utils/up_version.sh` | Tag + build + upload to PyPI. **Never run it.** |
 | `README.md` | The only user documentation. Must stay in sync with the printed output. |
 
@@ -201,8 +202,11 @@ interactivity or the summary — `AUTO` takes a different branch in each case.
 
 ## 7. Repo hygiene
 
-* Version lives in **`setup.py` only** (`0.3.0`). Bumping it is what drives
-  `utils/up_version.sh` (git tag + PyPI upload). Never tag, publish, or run that script.
+* Version lives in **`pyproject.toml` only** (`project.version`, `0.3.0`). Bumping it
+  is what drives `utils/up_version.sh` (git tag + PyPI upload), which reads it back
+  with `sed`. Never tag, publish, or run that script.
+* There is **no `setup.py` and no `setup.cfg`** — do not add one back. Build with
+  `python -m build`; `pip install -e ".[test]"` is the dev install.
 * Never commit `custom_profiler/__pycache__/` or the `*.log` / `demologger.txt` files
   the demos produce.
 * Imports inside the package are **absolute** (`from custom_profiler.collecteur import …`).

@@ -7,7 +7,7 @@ unalias -a
 
 current_script_dir="$( cd "$( dirname "${0}" )" &> /dev/null && pwd )"
 project_root_dir="$(dirname ${current_script_dir})"
-version_file=$(python setup.py --version)
+version_file=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "${project_root_dir}/pyproject.toml" | head -n 1)
 echo version_file : $version_file
 
 ########################

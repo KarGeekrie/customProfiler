@@ -1,0 +1,4 @@
+include README.md
+include AGENTS.md
+recursive-include test *.py *.md
+prune test/__pycache__
