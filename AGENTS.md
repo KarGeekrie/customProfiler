@@ -2,7 +2,7 @@
 
 Project: **custom_profiler** — a small, dependency-light (only `psutil`) time & memory
 profiler for Python, published on PyPI as `custom-profiler` (author: Karim Ammar,
-repo: https://github.com/KarGeekrie/customProfiler).
+repo: https://github.com/KarGeekrie/customProfiler). MIT.
 
 Read this file before touching code. It records what is *not* obvious from reading
 the sources.
@@ -13,83 +13,103 @@ the sources.
 
 | File | Role |
 |---|---|
-| `custom_profiler/__init__.py` | Public API + **side effects at import** (see §3). |
+| `custom_profiler/__init__.py` | Public API (`__all__`, `__version__`) + **side effects at import** (see §3). |
 | `custom_profiler/collecteur.py` | Singleton `profiler_collecteur`: data store, all printing/formatting, the end-of-run summary, `options()` and the logger wiring. **The core of the project.** |
-| `custom_profiler/custum_profiler.py` | `profiler` decorator, `magic_profiler` context manager, and the memory-watcher `Thread` (`task` / `thread_mananger`). |
+| `custom_profiler/_profiler.py` | `profiler` decorator, `magic_profiler` context manager, and the memory-watcher `Thread` (`task` / `_ThreadManager`). |
 | `custom_profiler/line_by_line.py` | `sys.settrace`-based line-by-line tracer (`trace_calls` / `trace_lines`). |
-| `custom_profiler/custum_logger.py` | `add_logging_level()` — adds the custom `PROFILER` level (level 25) to `logging`. |
+| `custom_profiler/_logging.py` | `add_logging_level()` — adds the custom `PROFILER` level (level 25) to `logging`. |
 | `custom_profiler/human_readable_time.py` | `human_time_duration()` (aliased `htd`) — fixed-width time strings. |
+| `custom_profiler/custum_profiler.py`, `custum_logger.py` | Deprecating shims for the two renamed modules. Nothing new goes in them. |
 | `test/` | Automated `pytest` suite (see §6). |
 | `test/demo/` | Runnable snippets backing the README's output blocks — printed, not asserted; excluded from collection. |
 | `pyproject.toml` | **The** packaging file (PEP 621, setuptools backend) — and the pytest config (`[tool.pytest.ini_options]`). |
-| `MANIFEST.in` | Ships the test tree in the sdist. |
+| `MANIFEST.in` | Ships the test tree, LICENSE and CHANGELOG in the sdist. |
+| `.github/workflows/tests.yml` | CI: pytest on 3.9→3.13 × Linux/macOS/Windows, plus a build + `twine check` job. |
 | `utils/up_version.sh` | Tag + build + upload to PyPI. **Never run it.** |
 | `README.md` | The only user documentation. Must stay in sync with the printed output. |
+| `CHANGELOG.md` | What changed in 1.0, and the full deprecation table. |
 
-Public API (everything users are allowed to import):
+Public API — everything users are allowed to import:
 
 ```python
-from custom_profiler import profiler, profiler_lbl, magic_profiler, \
-                            profiler_collecteur, INTERACTIVITY_OPT_ENUM
+from custom_profiler import (profiler, profiler_lbl, magic_profiler,
+                             profiler_collecteur, Interactivity, __version__)
 ```
 
-* `profiler` / `profiler_lbl` are `functools.partial(custum_profiler.profiler, linePerline=False/True)`.
+* `profiler` / `profiler_lbl` work bare (`@profiler`) or called (`@profiler(name="…")`).
 * `profiler_collecteur` exported from `__init__` is an **instance**, not the class.
-* `INTERACTIVITY_OPT_ENUM`: `ENABLE` / `MF_NO_INTERAC` / `DISABLE` / `AUTO`.
+* `Interactivity` is a `str, Enum`: `ENABLE` / `MF_NO_INTERAC` / `DISABLE` / `AUTO` / `OFF`.
+  `INTERACTIVITY_OPT_ENUM` is an alias of it.
 
 ---
 
-## 2. Hard rule: do not "fix" the spelling of the public API
+## 2. The 1.0 deprecation contract
 
-The codebase is full of deliberate/legacy misspellings that are **part of the shipped
-API** and of the module paths on PyPI. Renaming them is a breaking change for every
-user, and is out of scope unless the maintainer explicitly asks for a major version.
+1.0 corrected the misspelled public names and kept **every** old spelling working.
+That contract is the thing to protect:
 
-Keep as-is, everywhere:
+* Old `options()` keywords (`interractivity`, `useLogger`, `loggername`,
+  `addCustumLvl`, `profilerlvl`, `forcePrintInCsl`, `noSummaryInLog`) are accepted
+  through `**legacy` in `options()` and raise `DeprecationWarning`.
+* Old result keys (`peack_memory`, `peack_memory_b`, `memory_peack`,
+  `memory_peack_b`) resolve through `_ProfData.__getitem__`, which warns. They are
+  **not** stored in the dict, so `keys()` and `to_dict()` stay clean.
+* `custom_profiler.custum_profiler` and `custum_logger` are shim modules that warn
+  on import and re-export from `_profiler` / `_logging`.
+* `INTERACTIVITY_OPT_ENUM`, `thread_mananger` are plain aliases.
 
-`custum_profiler`, `custum_logger`, `collecteur`, `profiler_collecteur`,
-`interractivity`, `INTERACTIVITY_OPT_ENUM`, `MF_NO_INTERAC`, `addCustumLvl`,
-`loggername`, `forcePrintInCsl`, `noSummaryInLog`, `peack_memory`, `peack_memory_b`,
-`memory_peack`, `memory_peack_b`, `thread_mananger`, `mem_peack_b`, `linePerline`.
+None of this may be removed before 2.0. When you add a public name, add it to
+`__all__` and to the CHANGELOG's table.
 
-The same applies to the returned dict keys of `profiler_collecteur[...]` and of
-`get_global_info()` — they are documented in the README and consumed by users.
+**Still deliberately spelled as they are**: `profiler`, `profiler_lbl`,
+`magic_profiler`, `profiler_collecteur`, and the module `collecteur.py`. They are
+in every README example, and `collecteur` is French, not a typo. The storage
+attribute is still `profC.interractivity`; `interactivity` is a property alias on
+top of it (making the misspelled one a property would break `__new__`, which
+assigns it on the class).
 
-Do not do repo-wide reformatting, do not add type hints, do not convert
-`INTERACTIVITY_OPT_ENUM` to `enum.Enum`, do not restyle comments. Match the
-surrounding style: 4 spaces, no docstrings except where they already exist,
-leading-comma multi-line argument lists, mixed FR/EN comments.
+Match the surrounding style: 4 spaces, no docstrings except where they already
+exist, leading-comma multi-line argument lists, mixed FR/EN comments. Do not
+reformat wholesale. Type hints go on the public API only — the tracer's hot path
+stays as it is.
 
 ---
 
 ## 3. Behaviours that will bite you
 
 * **Import has side effects.** `__init__.py` instantiates the singleton (which starts
-  the global timer) and calls `options(interractivity=AUTO)`. `AUTO` resolves at that
+  the global timer) and calls `options(interactivity=AUTO)`. `AUTO` resolves at that
   moment via `sys.stdout.isatty()` → `ENABLE` on a TTY, `MF_NO_INTERAC` when the
   output is redirected.
 * **`profiler_collecteur` is a singleton with class-level state.** `__new__` is
-  declared `def __new__(self)` — the first parameter is the *class*, so all attributes
-  (`profData`, `profThread`, `start_time`, `deep`, …) live on the class. There is one
-  shared collector per process, by design.
-* **`options()` resets what you don't pass.** Every keyword has a default, so calling
-  `options(useLogger=True)` also silently resets `interractivity` to `AUTO`,
-  `forcePrintInCsl` to `False`, etc. Callers must pass the whole set (the README
-  examples do).
+  declared `def __new__(self)` — the first parameter is the *class*, so the shared
+  attributes (`profData`, `profThread`, `start_time`, …) live on the class. There is
+  one collector per process, by design.
+* **Depth and re-entrancy are per thread**, held in `_local` (a `threading.local`)
+  behind the `deep` and `_active` properties. Two threads calling the same profiled
+  function are not nested inside one another. `profData` mutation is guarded by
+  `_lock` (an `RLock`, because `save()` calls `print_line()`).
+* **A recursive call is timed by its outermost frame only.** `incr(fname)` returns
+  `False` for a re-entrant call; `save(..., outermost=False)` then bumps `nbCall`
+  and nothing else — no time, no memory, no printed line. Without that, `fib(4)`
+  counted the same seconds four times over.
+* **`save(keep_deep=True)`** records an entry that is *not* a nesting level. The
+  line-by-line tracer uses it: a traced line must not move the counter the
+  enclosing function pushed.
+* **`options()` only changes what you pass.** Every parameter defaults to `_UNSET`.
+  Adding a parameter with a concrete default silently resurrects the old footgun.
 * **`useLogger=True` downgrades `ENABLE` to `MF_NO_INTERAC`** — the interactive
   carriage-return line would corrupt a log file.
-* **Two different end-of-run summary paths.** Without a logger, the summary is printed
-  from `profiler_collecteur.__del__`. With a logger, it is emitted from an
-  `atexit`-registered callback. Interpreter-shutdown ordering makes both fragile:
-  if you change the summary, test both paths and both console/file cases.
-* **`add_logging_level('PROFILER', 25)` raises `AttributeError` if already defined.**
-  Consequence: `options(useLogger=True, addCustumLvl=True)` can only be called once per
-  process. This is why `test/demo/demo_logger.py` runs one case per process and why
-  `test/test_logger.py` drives each case through `run_py` (§6).
-* **The watcher thread** (`task` in `custum_profiler.py`) polls every 10 ms and prints
-  only when `i % 100 == True` — i.e. `== 1`, since `True == 1`. That is once per second,
-  intentionally rare. Leave it alone unless you are changing the refresh rate on
-  purpose; it is not a typo to be "cleaned up".
+* **`add_logging_level('PROFILER', 25)` raises if the level already exists**, so
+  `_enable_logger` guards with `hasattr(logging, self.lvl)`. Keep that guard:
+  without it, calling `options(use_logger=True)` twice raises.
+* **The summary comes from `atexit`**, registered once in `__new__`
+  (`_report_at_exit`). Never move it back to `__del__`: at interpreter teardown the
+  module globals it needs may already be gone.
+* **The watcher thread** (`task` in `_profiler.py`) wakes every `POLL_S` and both
+  samples memory and repaints every `REFRESH_S` (one second). That means the `peak`
+  column is a 1 Hz sample — the README says so. Raising the sampling rate is a real
+  improvement, but it changes reported numbers, so it needs a decision first.
 * **`profiler_lbl` starts no watcher thread**, so line-by-line mode has no memory-peak
   column (`peak`). The README says so; keep it true.
 * **The line tracer keeps its state in `line_by_line.state`**, a module-level
@@ -106,13 +126,15 @@ leading-comma multi-line argument lists, mixed FR/EN comments.
   `python custom_profiler/line_by_line.py` (the `__main__` block) after any change.
 * **`get_source()` caches `inspect.getsourcelines` per code object.** It used to run
   on every single line event, which dominated the tracer's own cost.
-* **`bytes2human` is redefined in `collecteur.py`** to handle negative deltas (it wraps
-  `psutil._common.bytes2human` and prepends `-`). `custum_profiler.py` imports the
-  *psutil* one directly, which cannot render negatives. Use the collector's version
-  for anything that can go negative.
-* **Platform support.** `import resource` is guarded by `sys.platform == 'linux'`, but
-  `get_global_info()` uses it on every non-`win32` platform → `NameError` on macOS.
-  Known limitation; only touch it if the task is about platform support.
+* **`bytes2human` is vendored** in `collecteur.py` (psutil's lives in the private
+  `psutil._common`) and wrapped to render negative deltas. Use it — never
+  `psutil._common` — for anything that can go negative.
+* **Platform memory.** Windows reads `peak_wset`; everything else reads
+  `ru_maxrss`, which is **kibibytes on Linux and bytes on macOS** — hence
+  `RU_MAXRSS_UNIT`. Both halves were broken before 1.0.
+* **`CUSTOM_PROFILER=0`** is read once, at import of `_profiler`, and makes the
+  decorators return the function untouched. `Interactivity.OFF` is the runtime
+  equivalent, checked at the top of the wrapper.
 
 ---
 
@@ -121,11 +143,12 @@ leading-comma multi-line argument lists, mixed FR/EN comments.
 The README shows exact console output. Column widths, the ⚡ prefixes, the
 `"="*108` rule, the `{fname: <45.45}` field, the `+---` / `-+--` depth markers built
 from `profData[key]["deep"]`, and the nesting glyphs `┌─` / `├─` driven by
-`self.deep = [current, previous]` are all reproduced there.
+`deep = [current, previous]` are all reproduced there.
 
 If you change any of that, **regenerate and update the corresponding README blocks in
-the same commit.** Depth bookkeeping is split across `incr()` (before the call) and
-`save()` (which decrements) — keep them balanced.
+the same commit** by running the matching script in `test/demo/`. Depth bookkeeping
+is split across `incr()` (before the call) and `save()` (which decrements) — keep
+them balanced.
 
 Time strings come from `human_time_duration` and are fixed-width (11 chars + unit);
 memory strings from `bytes2human`. Do not inline ad-hoc formatting.
@@ -135,7 +158,7 @@ memory strings from `bytes2human`. Do not inline ad-hoc formatting.
 ## 5. Performance
 
 This is a profiler: overhead is the product. The hot paths are
-`profiler.wrapper`, `magic_profiler.__enter__/__exit__`, `task`'s loop and
+`_wrap.wrapper`, `magic_profiler.__enter__/__exit__`, `task`'s loop and
 `trace_lines`. Do not add I/O, imports, allocations or string work there. Timing must
 stay `time.perf_counter()`; memory must stay `process.memory_info().rss` on the module
 level `process = psutil.Process()` object (never re-create it per call).
@@ -149,7 +172,7 @@ The system `python3` has **no `psutil`**. Use a venv:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[test]"
-pytest                      # ~4 s, 97 passed / 6 xfailed
+pytest                      # ~7 s, 153 tests
 pytest -m "not slow"        # in-process only, no subprocesses
 ```
 
@@ -159,33 +182,33 @@ Suite layout (`test/`):
 |---|---|
 | `conftest.py` | `reset_collecteur` (autouse) and `run_py` — see below. |
 | `test_human_time.py` | Unit selection, the 13-char fixed width, boundaries, the `0` quirk. |
-| `test_bytes2human.py` | Negative deltas, sign-free zero, parity with psutil. |
+| `test_bytes2human.py` | Negative deltas, sign-free zero, parity with psutil, the enum. |
 | `test_collecteur_api.py` | `save`/`__getitem__`/`get_global_info`/`thread_view` — the README's data contract. |
 | `test_output_format.py` | Column widths, `peak` column, tree glyphs, depth markers, logger vs stdout routing. |
 | `test_profiler_decorator.py` | `@profiler`, `magic_profiler`, nesting, watcher-thread lifecycle, raising calls. |
-| `test_options.py` | Enum validation, the reset-on-partial-call gotcha, `AUTO` on and off a tty. |
+| `test_concurrency.py` | Threads and recursion: the two shapes a single global counter got wrong. |
+| `test_public_api.py` | `__all__`, mapping interface, `reset`/`to_dict`, named decorators, kill switch, every deprecated spelling. |
+| `test_options.py` | Enum validation, partial calls, legacy keywords, `AUTO` on and off a tty. |
 | `test_line_by_line.py` | `@profiler_lbl` output, source line numbers, no peak column. |
-| `test_logger.py` | `PROFILER` vs `INFO`, `atexit` summary, `noSummaryInLog`, `forcePrintInCsl`. |
+| `test_logger.py` | `PROFILER` vs `INFO`, `atexit` summary, `no_summary_in_log`, `force_print_in_console`. |
 
-Two rules the suite is built on — respect them when adding tests:
+Rules the suite is built on — respect them when adding tests:
 
 * **`reset_collecteur` is autouse** and wipes the singleton before *and* after each
   test. Never leave state (or a leaked watcher thread) behind; if a test cannot help
   it, run it out-of-process.
-* **`run_py(code, tty=False)`** runs a snippet in a fresh interpreter and returns its
-  stdout. Use it for anything that can only happen once per process
-  (`add_logging_level`, `sys.settrace`, the `atexit`/`__del__` summary, `AUTO`
-  resolved at import) or that needs a real terminal (`tty=True`, via `pty`).
-  It dedents *and* left-strips the snippet, so **line N of the literal is line N of
-  the script** — the line-by-line tests assert on real source line numbers.
+* **`run_py(code, tty=False, env=None)`** runs a snippet in a fresh interpreter and
+  returns its stdout. Use it for anything that can only happen once per process
+  (`add_logging_level`, `sys.settrace`, the `atexit` summary, `AUTO` and
+  `CUSTOM_PROFILER` resolved at import) or that needs a real terminal (`tty=True`,
+  via `pty`). It dedents *and* left-strips the snippet, so **line N of the literal is
+  line N of the script** — the line-by-line tests assert on real source line numbers.
 * Keep sleeps at ~0.02 s and assert timings with a generous `pytest.approx(abs=0.15)`.
   Nothing in the suite may depend on wall-clock precision.
+* A bug worth fixing later gets an `xfail(strict=True)` test, not a comment. Strict
+  means it turns into a failure the day someone fixes it.
 
-**Six tests are `xfail(strict=True)`** — they pin known bugs (see §8). `strict` means
-they turn into failures the day someone fixes the bug: that is the signal to delete
-the marker, not to delete the test.
-
-The demo scripts are unchanged and still regenerate the README output:
+The demo scripts regenerate the README output:
 
 ```bash
 python test/demo/prof_function.py     # @profiler, repeated calls
@@ -200,55 +223,36 @@ python custom_profiler/human_readable_time.py  # formatting table
 Run them interactively (a TTY) *and* redirected (`> out.txt`) when you touch printing,
 interactivity or the summary — `AUTO` takes a different branch in each case.
 
+---
+
 ## 7. Repo hygiene
 
-* Version lives in **`pyproject.toml` only** (`project.version`, `0.3.0`). Bumping it
-  is what drives `utils/up_version.sh` (git tag + PyPI upload), which reads it back
-  with `sed`. Never tag, publish, or run that script.
+* Version lives in **`pyproject.toml` only** (`project.version`). Bumping it is what
+  drives `utils/up_version.sh` (git tag + PyPI upload), which reads it back with
+  `sed`. Never tag, publish, or run that script.
 * There is **no `setup.py` and no `setup.cfg`** — do not add one back. Build with
   `python -m build`; `pip install -e ".[test]"` is the dev install.
+* Every user-visible change needs a `CHANGELOG.md` entry.
 * Never commit `custom_profiler/__pycache__/` or the `*.log` / `demologger.txt` files
   the demos produce.
 * Imports inside the package are **absolute** (`from custom_profiler.collecteur import …`).
   Keep that style.
-* Commit messages in this repo are short and lowercase (`up doc ...`, `fix ... bug`,
-  `improvement logger`). Match it. Commit or push only when asked.
+* `custum_profiler.py` is the one file in the repo with CRLF line endings. Preserve
+  them; normalising rewrites its whole `git blame`.
+* Commit messages in this repo are short and lowercase (`up doc ...`, `fix ... bug`).
+  Match it. Commit or push only when asked.
 * `gif/demoProf.gif` is the README demo; regenerate it only on request.
 
 ---
 
-## 8. Bug history pinned by the test suite
+## 8. Known limitations, on purpose
 
-Six bugs were fixed on `fix/known-bugs-and-pyproject`; each keeps a regression test.
-Do not reintroduce them:
+Documented in the README's *Limitations* section, not bugs to fix by surprise:
 
-1. **`human_time_duration` >= 1 h with a float** rendered as
-   `'2.0h2.0min5.399999999999636s'` (28 chars instead of 12). The branch now formats
-   with `{h:3.0f}` — real `perf_counter()` deltas are always floats.
-   → `test_human_time.py::test_hours_branch_with_float_input`
-2. **A raising call was never recorded** — `profiler.wrapper` now closes over a
-   `try/finally`.
-   → `test_profiler_decorator.py::test_raising_call_is_still_recorded`
-3. **`deep[0]` drifted after an exception**, indenting every later line one level too
-   deep, permanently. Same `try/finally`.
-   → `test_profiler_decorator.py::test_depth_is_restored_when_the_call_raises`
-4. **The watcher thread leaked after an exception** (`tm.end()` was skipped) and kept
-   writing into `profThread` for the rest of the process. Same `try/finally`, plus
-   `useThread` is now latched at entry instead of re-tested at exit.
-   → `test_profiler_decorator.py::test_watcher_thread_is_not_leaked_when_the_call_raises`
-5. **Line labels drifted** — they came from the *next* trace event minus one, so a
-   comment or blank line shifted every following number. Each statement now carries
-   its own `f_lineno`.
-   → `test_line_by_line.py::test_line_numbers_survive_a_comment_in_the_body`
-6. **A multi-line statement swallowed the rest of the function** — see §3.
-   → `test_line_by_line.py::test_multiline_statement_does_not_swallow_the_rest`
-
-**Still open**, deliberately (`xfail(strict=True)`):
-
-* **Line mode leaves `profC.deep` far below its baseline** — every per-line `save()`
-  decrements the counter without a matching `incr()`, so `deep[0]` ends at `-4` after
-  a 3-line function and anything profiled afterwards is mis-indented. Any fix changes
-  the depth markers the README's line-by-line summary shows (`----` would become
-  `+---`), so it needs a maintainer decision, not a silent patch.
-  → `test_line_by_line.py::test_line_mode_leaves_the_depth_counter_alone`
-* **`get_global_info()` raises `NameError` on macOS** — see §3.
+* Memory is process RSS, so it is only meaningful single-threaded, and a `del` may
+  show no drop because the allocator keeps the pages.
+* The `peak` column is sampled at 1 Hz (see §3).
+* `sys.settrace` means `profiler_lbl` cannot coexist with a debugger or `coverage`,
+  and it follows only the decorated function.
+* No async and no generator support. Both are real gaps; both need their semantics
+  decided before any code.

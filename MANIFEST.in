@@ -1,4 +1,6 @@
 include README.md
 include AGENTS.md
+include CHANGELOG.md
+include LICENSE
 recursive-include test *.py *.md
 prune test/__pycache__

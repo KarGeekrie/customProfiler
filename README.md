@@ -281,6 +281,27 @@ PROFILER: ⚡:
           ⚡:   +---                 my_func                  |    1    |        6.13s  /        6.13s  |    7.9M  /  160.3M
 ```
 
+## Limitations :
+
+Worth knowing before you trust a number :
+
+* **Memory is the process RSS**, not your function's allocations. Anything else
+  running in the process — another thread, a garbage collection, an import — lands
+  in the delta. Freed memory often stays in the allocator, so a `del` may show no
+  drop at all.
+* **Profile memory single-threaded.** Time is measured per thread and is
+  meaningful under concurrency; memory is process-wide and is not.
+* **A recursive function is timed by its outermost call.** `nb_call` counts every
+  entry, `global_time` counts the seconds it was on the stack, once.
+* **`@profiler_lbl` uses `sys.settrace`**, so it cannot share a process with a
+  debugger or with `coverage`, and it makes the traced function much slower. It
+  follows only the decorated function, not the functions it calls, and reports no
+  memory peak.
+* **The memory peak is sampled once per second** by the watcher thread, so a
+  spike inside a fast function can be missed. The `Δ` column is exact; the `peak`
+  column is a best effort.
+* The profiler itself costs time. For microbenchmarks, use `timeit`.
+
 ## Row profiler:
 
 If you don't want any dependencies, simply copy the following code:
