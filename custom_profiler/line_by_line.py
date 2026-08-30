@@ -105,7 +105,9 @@ def save_line(frame):
     men = process.memory_info().rss - state.tic_mem
     fname     = f"l {state.lineno:<3} {state.statement:40}"
     fnameSave = f"{state.co_name} l {state.lineno:<3}"
-    profC.save(fnameSave, t, men, fname)
+    # keep_deep: a traced line is not a nesting level, so it must not decrement
+    # the depth counter the enclosing function pushed
+    profC.save(fnameSave, t, men, fname, keep_deep=True)
 
 
 def trace_lines(frame, event, arg):

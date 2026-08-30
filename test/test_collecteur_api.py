@@ -117,3 +117,38 @@ def test_str_with_data_is_the_summary_table(pc):
     assert "fct name" in out and "Nb call" in out
     assert "=" * 108 in out
     assert "my_func" in out
+
+
+def test_vendored_bytes2human_matches_psutil():
+    """The formatting is vendored to avoid psutil's private API: keep it identical."""
+    import psutil
+    from custom_profiler.collecteur import _bytes2human
+    for value in [0, 1, 10, 1023, 1024, 1025, 10 ** 6, 10 ** 9, 2 ** 40, 3 * 2 ** 50]:
+        assert _bytes2human(value) == psutil._common.bytes2human(value), value
+
+
+def test_global_memory_peak_is_plausible(pc):
+    """Guards the ru_maxrss unit: kibibytes on Linux, bytes on macOS."""
+    import psutil
+    rss = psutil.Process().memory_info().rss
+    peak = pc.get_global_info()["memory_peack_b"]
+    assert rss * 0.5 < peak < rss * 20
+
+
+def test_summary_survives_a_call_still_running(pc):
+    """An inner recursive frame records nothing until the outer one returns."""
+    pc.incr("f")
+    pc.incr("f")
+    pc.save("f", 1.0, 100, outermost=False)
+    assert pc["f"]["nb_call"] == 1
+    assert pc["f"]["max_memory_b"] == []
+    assert "f" in str(pc)
+
+
+def test_keep_deep_leaves_the_counter_alone(pc):
+    pc.incr()
+    before = pc.deep[0]
+    pc.save("line", 0.1, 0, keep_deep=True)
+    assert pc.deep[0] == before
+    pc.save("fct", 0.1, 0)
+    assert pc.deep[0] == before - 1

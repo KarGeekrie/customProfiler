@@ -257,12 +257,8 @@ def test_the_last_line_is_saved_when_the_function_raises(run_py):
     assert _keys(out) == ["my_func l 6", "my_func l 7", "my_func"]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug (not in the fixed batch, fixing it would change the documented "
-    "summary markers): every per-line save() decrements profC.deep without a "
-    "matching incr(), so deep[0] ends far below its baseline"
-))
 def test_line_mode_leaves_the_depth_counter_alone(run_py):
+    """A traced line is not a nesting level: it must not move the depth counter."""
     out = run_py(
         """
         from custom_profiler import profiler_lbl

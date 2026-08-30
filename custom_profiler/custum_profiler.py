@@ -19,12 +19,18 @@ from custom_profiler.human_readable_time import human_time_duration as htd
 profC = profiler_collecteur()
 
 
+POLL_S    = 0.01  # how often the watcher wakes up
+REFRESH_S = 1.    # how often it samples memory and repaints the interactive line
+
+
 def task(event, fname, start_time, start_mem):
-    i = 0
+    next_refresh = time.perf_counter() + REFRESH_S
     while True :
-        time.sleep(0.01)
-        if i % 100 == True :
-            t_str = htd(time.perf_counter() - start_time)
+        time.sleep(POLL_S)
+        now = time.perf_counter()
+        if now >= next_refresh :
+            next_refresh = now + REFRESH_S
+            t_str = htd(now - start_time)
             dm = process.memory_info().rss - start_mem
             profC.thread_view(fname, dm) #sauvegarde delta mem max
             strmen = bytes2human(dm)
@@ -32,7 +38,6 @@ def task(event, fname, start_time, start_mem):
                 if threading.active_count() < 3:
                     profC.print_line(fname, t_str, strmen, end="\r", color="\033[93m")
 
-        i += 1
         if event.is_set():
             break
 
@@ -52,11 +57,14 @@ class thread_mananger:
 def profiler(func, linePerline):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        useThread = profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE and linePerline == False
+        # a recursive call is timed by its outermost frame only: adding the inner
+        # frames would count the same seconds several times over
+        outermost = profC.incr(func.__name__)
+        useThread = (profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE
+                     and linePerline == False and outermost)
         if useThread:
             tm = thread_mananger(func.__name__, time.perf_counter(), process.memory_info().rss)
-        
-        profC.incr()
+
         start_mem = process.memory_info().rss
         start_time = time.perf_counter()
 
@@ -76,7 +84,8 @@ def profiler(func, linePerline):
             if useThread :
                 tm.end()
 
-            profC.save(func.__name__, end_time - start_time, end_mem - start_mem)
+            profC.save(func.__name__, end_time - start_time, end_mem - start_mem,
+                       outermost=outermost)
     return wrapper
 
 
@@ -86,10 +95,10 @@ class magic_profiler():
         self.func_name = func_name
 
     def __enter__(self):
-        self.useThread = profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE
+        self.outermost = profC.incr(self.func_name)
+        self.useThread = profC.interractivity != INTERACTIVITY_OPT_ENUM.DISABLE and self.outermost
         if self.useThread :
             self.tm = thread_mananger(self.func_name, time.perf_counter(), process.memory_info().rss)
-        profC.incr()
         self.start_mem = process.memory_info().rss
         self.start_time = time.perf_counter()
 
@@ -98,4 +107,5 @@ class magic_profiler():
         end_mem = process.memory_info().rss
         if self.useThread :
             self.tm.end()
-        profC.save(self.func_name, end_time - self.start_time, end_mem - self.start_mem)
+        profC.save(self.func_name, end_time - self.start_time, end_mem - self.start_mem,
+                   outermost=self.outermost)
