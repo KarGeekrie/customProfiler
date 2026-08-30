@@ -15,7 +15,12 @@ pip install custom-profiler
 For devellopeur :
 ```bash
 git clone https://github.com/KarGeekrie/customProfiler.git
-pip install -e customProfiler
+pip install -e "customProfiler[test]"
+```
+
+Run the test suite (the demo scripts of this README live in `test/demo/`) :
+```bash
+cd customProfiler && pytest
 ```
 
 ## Profil function :
@@ -168,7 +173,7 @@ a = my_func()
 
 Your log :
 ```bash
- ⚡ ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡ line per line : my_func from [...]/customProfiler/test/prof_lbl.py
+ ⚡ ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡ line per line : my_func from [...]/customProfiler/test/demo/prof_lbl.py
  ⚡ l 6       a = [1] * (10 ** 6)                 | takes :        3.41ms | consumes :  Δ    7.9M
  ⚡ l 7       b = [2] * (2 * 10 ** 7)             | takes :       63.09ms | consumes :  Δ  152.7M
  ⚡ l 8       time.sleep(2)                       | takes :        2.00s  | consumes :  Δ    0.0B

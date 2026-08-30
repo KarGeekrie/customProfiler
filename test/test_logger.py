@@ -1,61 +1,118 @@
-import time
-import logging
+"""Logger wiring and the end-of-run summary.
 
-from custom_profiler import profiler, INTERACTIVITY_OPT_ENUM
-from custom_profiler import profiler_collecteur as pc
+`add_logging_level` can only run once per interpreter and the summary is emitted
+from `atexit`/`__del__`, so every case here gets its own process.
+"""
 
-def options(filename='custom_profiler.log', # None = logger in csl ; False = logger in file
-                 interractivity = INTERACTIVITY_OPT_ENUM.AUTO, # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
-                 loggername = ' ⚡', 
-                 addCustumLvl = False):
+import pytest
 
-    pc.options(interractivity = interractivity # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
-              , useLogger = True
-              , loggername = loggername
-              , addCustumLvl = addCustumLvl
-              , profilerlvl = 25
-              , forcePrintInCsl = False
-              , noSummaryInLog = False)
+pytestmark = pytest.mark.slow
 
-    if filename:
-        logging.basicConfig(filename=filename, filemode='w')
-    else :
-        logging.basicConfig()
+PROFILED = """
+    import logging
+    from custom_profiler import profiler
+    from custom_profiler import profiler_collecteur as pc
+    from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
 
-    if addCustumLvl :
-        logger = logging.getLogger(loggername).profiler
-    else :
-        logger = logging.getLogger(loggername).info
-    logger(" test logger")
+    logging.basicConfig(filename="out.log", filemode="w")
+    pc.options(interractivity=INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC,
+               useLogger=True,
+               loggername=" ⚡",
+               addCustumLvl={addCustumLvl},
+               profilerlvl=25,
+               forcePrintInCsl={forcePrintInCsl},
+               noSummaryInLog={noSummaryInLog})
 
     @profiler
     def my_func():
-        a = [1] * (10 ** 6)
-        b = [2] * (2 * 10 ** 7)  
-        time.sleep(2)
-        del b
-        time.sleep(2)
+        a = [1] * (10 ** 5)
         return a
 
     my_func()
+"""
 
-def test_log_in_csl():
-    options(filename=None # None = logger in csl ; False = no logger
-            , loggername = ' ⚡'
-            , addCustumLvl = True)
 
-def test_log_in_file():
-    options(filename='custom_profiler.log' # None = logger in csl ; False = no logger
-            , loggername = ' ⚡' 
-            , addCustumLvl = False)
-    
-def test_log_in_file_profLvl():
-    options(filename='custom_profiler.log' # None = logger in csl ; False = no logger
-            , loggername = ' ⚡' 
-            , addCustumLvl = True)
+@pytest.fixture
+def run_logged(run_py, tmp_path):
+    def _run(addCustumLvl=True, forcePrintInCsl=False, noSummaryInLog=False):
+        stdout = run_py(PROFILED.format(
+            addCustumLvl=addCustumLvl,
+            forcePrintInCsl=forcePrintInCsl,
+            noSummaryInLog=noSummaryInLog,
+        ))
+        return stdout, (tmp_path / "out.log").read_text(encoding="utf-8")
 
-if __name__ == "__main__":
-    # test_log_in_csl()
-    # logging.getLogger().handlers.pop()
-    # test_log_in_file()
-    test_log_in_file_profLvl()
+    return _run
+
+
+def test_custom_level_is_used(run_logged):
+    _, log = run_logged(addCustumLvl=True)
+    assert "PROFILER" in log
+    assert "my_func" in log
+
+
+def test_without_custom_level_it_falls_back_to_info(run_logged):
+    _, log = run_logged(addCustumLvl=False)
+    assert "INFO" in log
+    assert "PROFILER" not in log
+    assert "my_func" in log
+
+
+def test_logger_name_prefixes_every_record(run_logged):
+    _, log = run_logged()
+    assert "⚡" in log
+
+
+def test_summary_is_appended_at_exit(run_logged):
+    _, log = run_logged(noSummaryInLog=False)
+    assert "customProfiler log" in log
+    assert "fct name" in log
+    assert "=" * 108 in log
+
+
+def test_no_summary_in_log_suppresses_it(run_logged):
+    _, log = run_logged(noSummaryInLog=True)
+    assert "my_func" in log
+    assert "fct name" not in log
+
+
+def test_logger_silences_the_console(run_logged):
+    stdout, log = run_logged(forcePrintInCsl=False)
+    assert "my_func" in log
+    assert "my_func" not in stdout
+
+
+def test_force_print_in_csl_keeps_both(run_logged):
+    stdout, log = run_logged(forcePrintInCsl=True)
+    assert "my_func" in log
+    assert "my_func" in stdout
+
+
+def test_summary_is_printed_at_exit_without_a_logger(run_py):
+    """Without a logger the summary comes from `__del__` at interpreter shutdown."""
+    out = run_py(
+        """
+        from custom_profiler import profiler
+        from custom_profiler import profiler_collecteur as pc
+        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+
+        pc.options(interractivity=INTERACTIVITY_OPT_ENUM.DISABLE)
+
+        @profiler
+        def my_func():
+            return 1
+
+        my_func()
+        print("END OF USER CODE")
+        """
+    )
+    body, _, summary = out.partition("END OF USER CODE")
+    assert "customProfiler log" in summary
+    assert "my_func" in summary
+
+
+def test_bare_import_still_reports_the_global_timer(run_py):
+    out = run_py("import custom_profiler\n")
+    assert "customProfiler log" in out
+    assert "global timer" in out
+    assert "fct name" not in out

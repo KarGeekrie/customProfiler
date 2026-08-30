@@ -12,6 +12,7 @@ setup(
             author_email='karim.ammar@cea.fr',
             packages=find_packages(),
             install_requires=["psutil"],
+            extras_require={"test": ["pytest"]},
             keywords="profiler, timer",
             url="https://github.com/KarGeekrie/customProfiler",
             python_requires=">=3.6, <4",
