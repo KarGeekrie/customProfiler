@@ -42,9 +42,10 @@ def test_call_count_and_times(pc, capsys):
 
     data = pc["my_func"]
     assert data["nb_call"] == 3
-    # against the measured wall clock, never the nominal sleep: a loaded CI
-    # runner turns sleep(0.02) into 0.07
-    assert data["global_time_s"] == pytest.approx(wall, abs=0.05)
+    # bracket the measured wall clock, never the nominal sleep: the recorded
+    # span sits strictly inside the window, and the sleeps dominate it
+    assert data["global_time_s"] <= wall
+    assert data["global_time_s"] > 0.5 * wall
     assert data["mean_time_s"] == pytest.approx(data["global_time_s"] / 3)
 
 
@@ -67,7 +68,8 @@ def test_context_manager_records_under_its_label(pc, capsys):
     capsys.readouterr()
 
     assert pc["my_block"]["nb_call"] == 1
-    assert pc["my_block"]["global_time_s"] == pytest.approx(wall, abs=0.05)
+    assert pc["my_block"]["global_time_s"] <= wall
+    assert pc["my_block"]["global_time_s"] > 0.5 * wall
 
 
 def test_nesting_is_recorded_as_depth(pc, capsys):

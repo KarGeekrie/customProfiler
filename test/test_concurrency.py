@@ -108,9 +108,10 @@ def test_recursion_times_only_the_outermost_frame(pc):
 
     data = pc["countdown"]
     assert data["nb_call"] == 4
-    # 4 frames x 20ms of sleep, but only one span of wall clock
-    assert data["global_time_s"] == pytest.approx(wall, abs=0.05)
-    assert data["global_time_s"] < 2 * wall
+    # 4 frames x 20ms of sleep, but only one span of wall clock: summing the
+    # frames would land near 4x this
+    assert data["global_time_s"] <= wall
+    assert data["global_time_s"] > 0.5 * wall
 
 
 def test_recursion_reports_one_line_per_outermost_call(pc, capsys):
@@ -149,7 +150,8 @@ def test_a_second_top_level_call_is_still_timed(pc):
     assert data["nb_call"] == 2
     # both calls are timed, so the total tracks the wall clock of the pair --
     # never the nominal sleep, which a loaded runner overshoots by 5x
-    assert data["global_time_s"] == pytest.approx(wall, abs=0.05)
+    assert data["global_time_s"] <= wall
+    assert data["global_time_s"] > 0.5 * wall
     assert len(data["per_call_memory_b"]) == 2
 
 
