@@ -212,3 +212,20 @@ def test_watcher_thread_is_not_leaked_when_the_call_raises(run_py):
     )
     leaked = int(next(l for l in out.splitlines() if l.startswith("LEAKED")).split()[1])
     assert leaked == 0
+
+
+@pytest.mark.slow
+def test_the_watcher_samples_before_the_first_refresh(pc, capsys):
+    """The peak column is worthless if the first sample only lands at REFRESH_S:
+    a sub-second call would never be sampled at all, and report peak 0.0B."""
+    @profiler
+    def quick():
+        big = [0] * (2 * 10 ** 6)
+        time.sleep(0.2)
+        return len(big)
+
+    quick()
+    capsys.readouterr()
+
+    assert "quick" in pc.profThread
+    assert pc["quick"]["peak_memory_b"] > 0

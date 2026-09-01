@@ -1,6 +1,7 @@
 import inspect
 import time
 import sys
+import threading
 
 import psutil
 process = psutil.Process()
@@ -81,10 +82,16 @@ def get_statement(code, lineno):
     return ' '.join(src), lineStart + idx
 
 
-class tracer_state(object):
-    """State of the line tracer. Only one frame is traced at a time."""
+class tracer_state(threading.local):
+    """State of the line tracer, one frame at a time.
+
+    sys.settrace is installed per thread, so this state is per thread too:
+    a module global would let two threads tracing at once cross their line
+    numbers, or drop one of them entirely.
+    """
 
     def __init__(self):
+        self.label = None   # survives reset(): set before the trace starts
         self.reset()
 
     def reset(self):
@@ -99,14 +106,11 @@ class tracer_state(object):
 
 state = tracer_state()
 
-# label the enclosing @profiler_lbl was given, so the per-line entries carry the
-# same name as the function entry
-pending_label = None
-
 
 def set_pending_label(label):
-    global pending_label
-    pending_label = label
+    """Label the enclosing @profiler_lbl was given, so the per-line entries carry
+    the same name as the function entry."""
+    state.label = label
 
 
 def save_line(frame):
@@ -153,7 +157,7 @@ def trace_calls(frame, event, arg):
 
     state.reset()
     state.frame = frame
-    state.co_name = pending_label or frame.f_code.co_name
+    state.co_name = state.label or frame.f_code.co_name
     return trace_lines
 
 

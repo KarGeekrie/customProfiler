@@ -31,7 +31,7 @@ REFRESH_S = 1.    # how often it samples memory and repaints the interactive lin
 
 
 def task(event, fname, start_time, start_mem):
-    next_refresh = time.perf_counter() + REFRESH_S
+    next_refresh = time.perf_counter()  # sample at once, then every REFRESH_S
     while True :
         time.sleep(POLL_S)
         now = time.perf_counter()
@@ -65,10 +65,12 @@ thread_mananger = _ThreadManager  # deprecated spelling, removed in 2.0
 
 
 #https://stackoverflow.com/questions/5929107/decorators-with-parameters
-def profiler(func=None, *, name=None, linePerline=False):
+def profiler(func=None, linePerline=False, *, name=None):
     """Profile a function.
 
     Usable bare (``@profiler``) or called (``@profiler(name="my label")``).
+
+    ``linePerline`` stays positional for the 0.3 spelling profiler(func, True).
     """
     def decorate(fct):
         if DISABLED :
@@ -89,30 +91,37 @@ def _wrap(func, fname, linePerline):
         # a recursive call is timed by its outermost frame only: adding the inner
         # frames would count the same seconds several times over
         outermost = profC.incr(fname)
-        useThread = (profC.interractivity != Interactivity.DISABLE
-                     and linePerline == False and outermost)
-        if useThread:
-            tm = _ThreadManager(fname, time.perf_counter(), process.memory_info().rss)
-
         start_mem = process.memory_info().rss
         start_time = time.perf_counter()
+        tm = None
+        installed = False
 
-        # everything after the call must run even when it raises, otherwise the
-        # watcher thread leaks and profC.deep never comes back down
+        # everything after incr() must run even when it raises, otherwise the
+        # watcher thread leaks and neither profC.deep nor the re-entrancy count
+        # comes back down
         try :
-            if linePerline :
+            if (profC.interractivity != Interactivity.DISABLE
+                    and linePerline == False and outermost) :
+                tm = _ThreadManager(fname, start_time, start_mem)
+
+            # only the frame that installed the tracer takes it away: a nested or
+            # recursive lbl call switching it off under its caller left the
+            # tracer state stuck, killing line tracing for the whole process
+            if linePerline and sys.gettrace() is None :
                 line_by_line.set_pending_label(fname)
                 sys.settrace(trace_calls)
+                installed = True
+
             return func(*args, **kwargs)
         finally :
-            if linePerline :
+            if installed :
                 sys.settrace(None)
                 line_by_line.set_pending_label(None)
 
             end_time = time.perf_counter()
             end_mem = process.memory_info().rss
 
-            if useThread :
+            if tm is not None :
                 tm.end()
 
             profC.save(fname, end_time - start_time, end_mem - start_mem,
@@ -132,11 +141,11 @@ class magic_profiler():
             return
 
         self.outermost = profC.incr(self.func_name)
-        self.useThread = profC.interractivity != Interactivity.DISABLE and self.outermost
-        if self.useThread :
-            self.tm = _ThreadManager(self.func_name, time.perf_counter(), process.memory_info().rss)
         self.start_mem = process.memory_info().rss
         self.start_time = time.perf_counter()
+        self.tm = None
+        if profC.interractivity != Interactivity.DISABLE and self.outermost :
+            self.tm = _ThreadManager(self.func_name, self.start_time, self.start_mem)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.disabled :
@@ -144,7 +153,7 @@ class magic_profiler():
 
         end_time = time.perf_counter()
         end_mem = process.memory_info().rss
-        if self.useThread :
+        if self.tm is not None :
             self.tm.end()
         profC.save(self.func_name, end_time - self.start_time, end_mem - self.start_mem,
                    outermost=self.outermost)

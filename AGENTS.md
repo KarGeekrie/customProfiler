@@ -106,16 +106,26 @@ stays as it is.
 * **The summary comes from `atexit`**, registered once in `__new__`
   (`_report_at_exit`). Never move it back to `__del__`: at interpreter teardown the
   module globals it needs may already be gone.
-* **The watcher thread** (`task` in `_profiler.py`) wakes every `POLL_S` and both
-  samples memory and repaints every `REFRESH_S` (one second). That means the `peak`
-  column is a 1 Hz sample — the README says so. Raising the sampling rate is a real
-  improvement, but it changes reported numbers, so it needs a decision first.
+* **The watcher thread** (`task` in `_profiler.py`) wakes every `POLL_S`, and both
+  samples memory and repaints every `REFRESH_S` (one second) — **starting
+  immediately**, not one `REFRESH_S` in. Delaying that first sample means a
+  sub-second call is never sampled and its `peak` column reads `0.0B`; that was a
+  regression, and `test_the_watcher_samples_before_the_first_refresh` pins it.
+  The `peak` column is still only a 1 Hz sample after that — the README says so.
+  Raising the rate is a real improvement, but it changes reported numbers, so it
+  needs a decision first.
 * **`profiler_lbl` starts no watcher thread**, so line-by-line mode has no memory-peak
   column (`peak`). The README says so; keep it true.
-* **The line tracer keeps its state in `line_by_line.state`**, a module-level
-  `tracer_state` holding the frame being traced, the pending statement and its
-  start/end line. Only the outermost frame is traced: `trace_calls` returns `None`
-  for nested calls, so a Python callee does not clobber the trace.
+* **The line tracer keeps its state in `line_by_line.state`**, a `tracer_state`
+  that subclasses `threading.local` — `sys.settrace` is installed per thread, so
+  the state must be too, or two threads tracing at once lose one of them. Only the
+  outermost frame is traced: `trace_calls` returns `None` for nested calls, so a
+  Python callee does not clobber the trace.
+* **Only the frame that installed the tracer removes it** (`sys.gettrace() is None`
+  guards the install). A nested or recursive `@profiler_lbl` calling
+  `sys.settrace(None)` under its caller left the state stuck and killed line
+  tracing for the rest of the process. It also means `profiler_lbl` no longer
+  clobbers a debugger's or coverage's tracer — it just reports nothing.
 * **Never derive a statement's extent from the trace events.** CPython emits one
   `line` event per statement for a simple multi-line expression, and several
   out-of-order ones for a complex one — that mismatch is what used to swallow the

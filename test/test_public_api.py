@@ -262,3 +262,17 @@ def test_deprecated_module_paths_still_import(run_py):
 def test_deprecated_thread_manager_alias():
     from custom_profiler import _profiler
     assert _profiler.thread_mananger is _profiler._ThreadManager
+
+
+def test_the_shim_still_takes_the_0_3_positional_call():
+    """0.3 spelled it profiler(func, linePerline); keyword-only would break that."""
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from custom_profiler.custum_profiler import profiler as legacy
+
+    def raw():
+        return 1
+
+    assert legacy(raw, False)() == 1
+    assert legacy(raw)() == 1

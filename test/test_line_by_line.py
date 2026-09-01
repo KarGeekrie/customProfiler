@@ -279,3 +279,92 @@ def test_line_mode_leaves_the_depth_counter_alone(run_py):
         """
     )
     assert "DEEP -1" in out
+
+
+def test_a_recursive_call_does_not_kill_later_traces(run_py):
+    """The inner frame used to switch tracing off under its caller, leaving the
+    tracer state stuck and every later @profiler_lbl silently empty."""
+    out = run_py(
+        """
+        from custom_profiler import profiler_lbl
+        from custom_profiler import profiler_collecteur as pc
+
+        @profiler_lbl
+        def rec(n):
+            a = 1
+            if n:
+                rec(n - 1)
+            return a
+
+        rec(2)
+
+        @profiler_lbl
+        def later():
+            b = 2
+            return b
+
+        later()
+        print("KEYS", "|".join(k for k in pc.keys() if " l " in k))
+        """
+    )
+    keys = _keys(out)
+    assert "rec l 6" in keys and "rec l 7" in keys
+    assert "later l 15" in keys and "later l 16" in keys
+
+
+def test_a_nested_line_profiled_call_does_not_cut_its_caller(run_py):
+    out = run_py(
+        """
+        from custom_profiler import profiler_lbl
+        from custom_profiler import profiler_collecteur as pc
+
+        @profiler_lbl
+        def inner():
+            y = 2
+            return y
+
+        @profiler_lbl
+        def outer():
+            x = 1
+            inner()
+            return x
+
+        outer()
+        print("KEYS", "|".join(k for k in pc.keys() if " l " in k))
+        """
+    )
+    keys = _keys(out)
+    # the caller keeps every one of its lines ...
+    assert keys == ["outer l 11", "outer l 12", "outer l 13"]
+    # ... and the callee is not traced, as documented
+    assert not any(k.startswith("inner l") for k in keys)
+
+
+def test_two_threads_do_not_lose_each_other(run_py):
+    """sys.settrace is per thread, so the tracer state is too."""
+    out = run_py(
+        """
+        import threading
+        from custom_profiler import profiler_lbl
+        from custom_profiler import profiler_collecteur as pc
+
+        @profiler_lbl
+        def work_a():
+            x = 1
+            return x
+
+        @profiler_lbl
+        def work_b():
+            y = 2
+            return y
+
+        ts = [threading.Thread(target=work_a), threading.Thread(target=work_b)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        print("KEYS", "|".join(sorted(k for k in pc.keys() if " l " in k)))
+        """
+    )
+    assert _keys(out) == ["work_a l 7", "work_a l 8",
+                          "work_b l 12", "work_b l 13"]

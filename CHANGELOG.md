@@ -34,6 +34,15 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
   character, so the columns stay aligned.
 * Nested Python calls are no longer traced in line mode, and `exception` events
   no longer close a statement (a `try`/`except` in the body double-counted).
+* **A recursive or nested `@profiler_lbl` used to kill line tracing for the whole
+  process**: the inner frame switched the tracer off under its caller, leaving the
+  state stuck so every later call reported no lines at all. Only the frame that
+  installed the tracer removes it now.
+* **Two threads running `@profiler_lbl` at once lost one of them.** `sys.settrace`
+  is per thread, so the tracer state is too.
+* A failure while starting the watcher thread no longer leaves the function marked
+  as running, which would have made every later call look re-entrant and go
+  untimed.
 
 ### Added
 
