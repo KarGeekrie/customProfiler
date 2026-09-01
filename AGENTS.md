@@ -215,10 +215,11 @@ Rules the suite is built on — respect them when adding tests:
   line N of the script** — the line-by-line tests assert on real source line numbers.
 * Keep sleeps at ~0.02 s, and **never assert against the nominal sleep, however
   generous the tolerance**: a loaded macOS runner turned `sleep(0.02)` into 0.07.
-  Measure the wall clock around the calls and *bracket* it —
-  `recorded <= wall` and `recorded > 0.5 * wall`. Not `approx(wall)` either: the
-  window also holds the profiler's own overhead, 55 ms of it for three calls on
-  that runner. The bracket is the real invariant and it needs no tuning.
+  Bracket it with the two things that are true on any machine: `recorded <= wall`
+  for a wall clock measured around the calls, and `recorded >= n * SLEEP * 0.95`
+  because `time.sleep` never returns early. A *fraction* of the window is not a
+  valid lower bound either — the profiler's own overhead was 55% of it on one
+  macOS runner, and that test went red on main.
 * A bug worth fixing later gets an `xfail(strict=True)` test, not a comment. Strict
   means it turns into a failure the day someone fixes it.
 
