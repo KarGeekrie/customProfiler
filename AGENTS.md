@@ -203,8 +203,10 @@ Rules the suite is built on — respect them when adding tests:
   `CUSTOM_PROFILER` resolved at import) or that needs a real terminal (`tty=True`,
   via `pty`). It dedents *and* left-strips the snippet, so **line N of the literal is
   line N of the script** — the line-by-line tests assert on real source line numbers.
-* Keep sleeps at ~0.02 s and assert timings with a generous `pytest.approx(abs=0.15)`.
-  Nothing in the suite may depend on wall-clock precision.
+* Keep sleeps at ~0.02 s, and **never assert against the nominal sleep, however
+  generous the tolerance**: a loaded macOS runner turned `sleep(0.02)` into 0.07.
+  Measure the wall clock around the calls and assert the recorded time tracks
+  *that* — which is the real invariant anyway.
 * A bug worth fixing later gets an `xfail(strict=True)` test, not a comment. Strict
   means it turns into a failure the day someone fixes it.
 

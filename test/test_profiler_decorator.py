@@ -34,13 +34,17 @@ def test_call_count_and_times(pc, capsys):
     def my_func():
         time.sleep(SLEEP)
 
+    start = time.perf_counter()
     for _ in range(3):
         my_func()
+    wall = time.perf_counter() - start
     capsys.readouterr()
 
     data = pc["my_func"]
     assert data["nb_call"] == 3
-    assert data["global_time_s"] == pytest.approx(3 * SLEEP, abs=0.15)
+    # against the measured wall clock, never the nominal sleep: a loaded CI
+    # runner turns sleep(0.02) into 0.07
+    assert data["global_time_s"] == pytest.approx(wall, abs=0.05)
     assert data["mean_time_s"] == pytest.approx(data["global_time_s"] / 3)
 
 
@@ -56,12 +60,14 @@ def test_memory_delta_is_recorded_per_call(pc, capsys):
 
 
 def test_context_manager_records_under_its_label(pc, capsys):
+    start = time.perf_counter()
     with magic_profiler("my_block"):
         time.sleep(SLEEP)
+    wall = time.perf_counter() - start
     capsys.readouterr()
 
     assert pc["my_block"]["nb_call"] == 1
-    assert pc["my_block"]["global_time_s"] == pytest.approx(SLEEP, abs=0.15)
+    assert pc["my_block"]["global_time_s"] == pytest.approx(wall, abs=0.05)
 
 
 def test_nesting_is_recorded_as_depth(pc, capsys):
