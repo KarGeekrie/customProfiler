@@ -106,3 +106,30 @@ def test_force_print_in_csl_writes_to_both(pc, capsys):
 
     assert seen == ["  hello"]
     assert capsys.readouterr().out == " ⚡hello\n"
+
+
+@pytest.mark.slow
+def test_output_survives_a_console_that_cannot_print_the_bolt(run_py):
+    """A cp1252 console (Windows) used to raise UnicodeEncodeError out of the
+    atexit summary. Degrade to a replacement char instead, one per character so
+    the columns stay put."""
+    out = run_py(
+        """
+        from custom_profiler import profiler
+        from custom_profiler import profiler_collecteur as pc
+        from custom_profiler.collecteur import Interactivity
+
+        pc.options(interactivity=Interactivity.DISABLE)
+
+        @profiler
+        def my_func():
+            return 1
+
+        my_func()
+        """,
+        env={"PYTHONIOENCODING": "cp1252"},
+    )
+    assert "customProfiler log" in out       # the summary is still printed
+    assert "my_func" in out
+    assert "?" in out                        # with the bolt replaced
+    assert "Traceback" not in out

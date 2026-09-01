@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from custom_profiler import profiler_collecteur
-from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+from custom_profiler.collecteur import Interactivity
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,8 +37,9 @@ def reset_collecteur():
         profiler_collecteur.logger = None
         profiler_collecteur.forcePrintInCsl = False
         profiler_collecteur.noSummaryInLog = False
+        profiler_collecteur._local.active = {}
         # never AUTO: the tests must not depend on pytest's capture mode
-        profiler_collecteur.interractivity = INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC
+        profiler_collecteur.interractivity = Interactivity.MF_NO_INTERAC
 
     _reset()
     yield profiler_collecteur
@@ -50,13 +51,15 @@ def pc(reset_collecteur):
     return reset_collecteur
 
 
-def _env():
+def _env(extra=None):
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
         [str(REPO_ROOT)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
     )
     env["PYTHONIOENCODING"] = "utf-8"
     env.pop("PYTHONWARNINGS", None)
+    if extra:  # last, so a test can override PYTHONIOENCODING
+        env.update(extra)
     return env
 
 
@@ -70,7 +73,7 @@ def run_py(tmp_path):
 
     counter = {"n": 0}
 
-    def _run(code, tty=False, check=True, timeout=60):
+    def _run(code, tty=False, check=True, timeout=60, env=None):
         counter["n"] += 1
         script = tmp_path / f"snippet_{counter['n']}.py"
         # lstrip so that line N of the literal is line N of the script: the
@@ -80,8 +83,10 @@ def run_py(tmp_path):
 
         if not tty:
             proc = subprocess.run(
-                cmd, cwd=tmp_path, env=_env(), timeout=timeout,
-                capture_output=True, text=True, encoding="utf-8",
+                cmd, cwd=tmp_path, env=_env(env), timeout=timeout,
+                # errors="replace": a snippet may deliberately run under another
+                # console encoding, and cp1252 "µs" is not valid utf-8
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
             if check:
                 assert proc.returncode == 0, proc.stderr
@@ -91,7 +96,7 @@ def run_py(tmp_path):
 
         master, slave = pty.openpty()
         proc = subprocess.Popen(
-            cmd, cwd=tmp_path, env=_env(),
+            cmd, cwd=tmp_path, env=_env(env),
             stdout=slave, stderr=subprocess.PIPE, close_fds=True,
         )
         os.close(slave)

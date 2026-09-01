@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "custom_profiler"
+dynamic = ["version"]
+description = "Time and memory profiler"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["profiler", "timer", "memory", "benchmark"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: System :: Benchmark",
+    "Typing :: Typed",
+]
+authors = [{name = "Karim Ammar", email = "karim.ammar@cea.fr"}]
+maintainers = [{name = "Karim Ammar", email = "karim.ammar@cea.fr"}]
+dependencies = ["psutil"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Source = "https://github.com/KarGeekrie/customProfiler"
+"Bug Reports" = "https://github.com/KarGeekrie/customProfiler/issues"
+
+# the version is the git tag: nothing to bump in this file
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+include = ["custom_profiler*"]
+
+[tool.setuptools.package-data]
+custom_profiler = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+norecursedirs = ["test/demo", ".venv", "build", "dist", "*.egg-info"]
+addopts = "-ra"
+markers = [
+    "slow: takes more than ~1s (real sleeps / subprocesses)",
+]

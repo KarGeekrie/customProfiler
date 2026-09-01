@@ -33,5 +33,12 @@ def test_zero_is_not_signed():
 
 def test_enum_list_exposes_only_the_options():
     assert sorted(get_ENUM_list(INTERACTIVITY_OPT_ENUM)) == [
-        "AUTO", "DISABLE", "ENABLE", "MF_NO_INTERAC",
+        "AUTO", "DISABLE", "ENABLE", "MF_NO_INTERAC", "OFF",
     ]
+
+
+def test_the_enum_members_still_compare_as_strings():
+    """Interactivity is a str Enum so `== "ENABLE"` keeps working."""
+    from custom_profiler.collecteur import Interactivity
+    assert Interactivity.ENABLE == "ENABLE"
+    assert INTERACTIVITY_OPT_ENUM is Interactivity

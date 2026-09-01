@@ -7,7 +7,15 @@ unalias -a
 
 current_script_dir="$( cd "$( dirname "${0}" )" &> /dev/null && pwd )"
 project_root_dir="$(dirname ${current_script_dir})"
-version_file=$(python setup.py --version)
+
+# the tag *is* the version: setuptools-scm derives it, nothing to bump in a file
+version_file="${1:-}"
+if [[ -z "${version_file}" ]]; then
+    echo "usage: $(basename ${0}) X.Y.Z"
+    echo "  the version comes from the git tag this script creates."
+    echo "  current: $(git -C ${project_root_dir} describe --tags --dirty 2>/dev/null || echo none)"
+    exit 1
+fi
 echo version_file : $version_file
 
 ########################
@@ -47,7 +55,7 @@ echo "check version number OK"
 #     python3 -m venv ${current_script_dir}/.venv_utils
 # fi
 # . ${current_script_dir}/.venv_utils/bin/activate
-pip install --upgrade pip setuptools tox
+pip install --upgrade pip setuptools setuptools-scm build twine
 
 # Tag the version
 git tag ${version_file}
@@ -64,7 +72,6 @@ if [[ "${answer}" == "y"* ]]; then
     if [ -d "dist" ]; then
         rm -rf dist
     fi
-    python3 -m pip install --upgrade build twine
     python3 -m build
     python3 -m twine upload --repository pypi dist/*
 fi

@@ -1,5 +1,5 @@
 import time
-from custom_profiler import profiler, profiler_lbl, magic_profiler, profiler_collecteur, INTERACTIVITY_OPT_ENUM
+from custom_profiler import profiler, profiler_lbl, magic_profiler, profiler_collecteur, Interactivity
 
 @profiler
 def my_func():
@@ -42,17 +42,17 @@ a = my_func_lbl()
 """
 import logging
 
-logging.basicConfig(filename='custom_profiler.log', filemode='w')
+logging.basicConfig(filename='custom_profiler.log', filemode='w', encoding='utf-8')
 
 loggername = " ⚡" # logger name
 addCustumLvl = False # add "PROFILER" level in logger
 
 pc = profiler_collecteur()
-pc.options(interractivity = INTERACTIVITY_OPT_ENUM.ENABLE # ENABLE / MF_NO_INTERAC / DISABLE / AUTO
-          , useLogger = True
-          , loggername = loggername
-          , addCustumLvl = addCustumLvl
-          , profilerlvl = 25)
+pc.options(interactivity = Interactivity.ENABLE # ENABLE / MF_NO_INTERAC / DISABLE / AUTO / OFF
+          , use_logger = True
+          , logger_name = loggername
+          , add_custom_level = addCustumLvl
+          , profiler_level = 25)
 
 #Log in consol
 #ch = logging.StreamHandler()

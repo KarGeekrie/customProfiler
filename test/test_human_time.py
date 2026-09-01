@@ -58,12 +58,8 @@ def test_hours_branch_with_int_input():
     assert htd(3661) == "  1h 1min 1s"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug: the >=1h branch formats floats with {h:3} instead of {h:3.0f}, "
-    "so a real perf_counter() delta renders as '2.0h2.0min5.399999999999636s' "
-    "and blows up the column alignment"
-))
 def test_hours_branch_with_float_input():
+    """A real perf_counter() delta is a float: it must stay 12 chars wide."""
     assert htd(7325.4) == "  2h 2min 5s"
     assert len(htd(3600.0)) == 12
 

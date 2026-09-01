@@ -6,7 +6,7 @@ import time
 import pytest
 
 from custom_profiler import magic_profiler, profiler
-from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+from custom_profiler.collecteur import Interactivity
 
 SLEEP = 0.02
 
@@ -34,13 +34,18 @@ def test_call_count_and_times(pc, capsys):
     def my_func():
         time.sleep(SLEEP)
 
+    start = time.perf_counter()
     for _ in range(3):
         my_func()
+    wall = time.perf_counter() - start
     capsys.readouterr()
 
     data = pc["my_func"]
     assert data["nb_call"] == 3
-    assert data["global_time_s"] == pytest.approx(3 * SLEEP, abs=0.15)
+    # bracket the measured wall clock, never the nominal sleep: the recorded
+    # span sits strictly inside the window, and the sleeps dominate it
+    assert data["global_time_s"] <= wall
+    assert data["global_time_s"] > 0.5 * wall
     assert data["mean_time_s"] == pytest.approx(data["global_time_s"] / 3)
 
 
@@ -52,16 +57,19 @@ def test_memory_delta_is_recorded_per_call(pc, capsys):
 
     eat()
     capsys.readouterr()
-    assert len(pc["eat"]["max_memory_b"]) == 1
+    assert len(pc["eat"]["per_call_memory_b"]) == 1
 
 
 def test_context_manager_records_under_its_label(pc, capsys):
+    start = time.perf_counter()
     with magic_profiler("my_block"):
         time.sleep(SLEEP)
+    wall = time.perf_counter() - start
     capsys.readouterr()
 
     assert pc["my_block"]["nb_call"] == 1
-    assert pc["my_block"]["global_time_s"] == pytest.approx(SLEEP, abs=0.15)
+    assert pc["my_block"]["global_time_s"] <= wall
+    assert pc["my_block"]["global_time_s"] > 0.5 * wall
 
 
 def test_nesting_is_recorded_as_depth(pc, capsys):
@@ -122,7 +130,7 @@ def test_watcher_thread_is_started_and_joined(pc, capsys):
 
 
 def test_disable_starts_no_thread(pc, capsys):
-    pc.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
+    pc.interractivity = Interactivity.DISABLE
     before = threading.active_count()
     seen = {}
 
@@ -141,7 +149,7 @@ def test_disable_starts_no_thread(pc, capsys):
 # Run with DISABLE so no watcher thread can leak into the rest of the session.
 
 def test_exception_propagates(pc, capsys):
-    pc.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
+    pc.interractivity = Interactivity.DISABLE
 
     @profiler
     def boom():
@@ -152,12 +160,8 @@ def test_exception_propagates(pc, capsys):
     capsys.readouterr()
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug: profiler.wrapper has no try/finally, so a raising call is "
-    "never recorded"
-))
 def test_raising_call_is_still_recorded(pc, capsys):
-    pc.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
+    pc.interractivity = Interactivity.DISABLE
 
     @profiler
     def boom():
@@ -169,12 +173,8 @@ def test_raising_call_is_still_recorded(pc, capsys):
     assert pc["boom"]["nb_call"] == 1
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug: incr() is never undone when the call raises, so deep[0] drifts "
-    "and every later line is indented one level too deep"
-))
 def test_depth_is_restored_when_the_call_raises(pc, capsys):
-    pc.interractivity = INTERACTIVITY_OPT_ENUM.DISABLE
+    pc.interractivity = Interactivity.DISABLE
 
     @profiler
     def boom():
@@ -187,10 +187,6 @@ def test_depth_is_restored_when_the_call_raises(pc, capsys):
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason=(
-    "known bug: tm.end() is skipped when the call raises, leaking one daemon "
-    "watcher thread that keeps writing into profThread forever"
-))
 def test_watcher_thread_is_not_leaked_when_the_call_raises(run_py):
     """Run out-of-process: a leaked watcher would pollute every later test."""
     out = run_py(
@@ -198,9 +194,9 @@ def test_watcher_thread_is_not_leaked_when_the_call_raises(run_py):
         import threading
         from custom_profiler import profiler
         from custom_profiler import profiler_collecteur as pc
-        from custom_profiler.collecteur import INTERACTIVITY_OPT_ENUM
+        from custom_profiler.collecteur import Interactivity
 
-        pc.options(interractivity=INTERACTIVITY_OPT_ENUM.MF_NO_INTERAC)
+        pc.options(interractivity=Interactivity.MF_NO_INTERAC)
         before = threading.active_count()
 
         @profiler
@@ -216,3 +212,20 @@ def test_watcher_thread_is_not_leaked_when_the_call_raises(run_py):
     )
     leaked = int(next(l for l in out.splitlines() if l.startswith("LEAKED")).split()[1])
     assert leaked == 0
+
+
+@pytest.mark.slow
+def test_the_watcher_samples_before_the_first_refresh(pc, capsys):
+    """The peak column is worthless if the first sample only lands at REFRESH_S:
+    a sub-second call would never be sampled at all, and report peak 0.0B."""
+    @profiler
+    def quick():
+        big = [0] * (2 * 10 ** 6)
+        time.sleep(0.2)
+        return len(big)
+
+    quick()
+    capsys.readouterr()
+
+    assert "quick" in pc.profThread
+    assert pc["quick"]["peak_memory_b"] > 0

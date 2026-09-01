@@ -34,7 +34,7 @@ def human_time_duration(seconds):
             h = seconds // 3600
             m = (seconds - h * 3600) // 60
             s = seconds - (h * 3600) - (m * 60)
-            return f"{h:3}h{m:2}min{s:2}s"
+            return f"{h:3.0f}h{m:2.0f}min{s:2.0f}s"
 
 if __name__ == "__main__":
     
