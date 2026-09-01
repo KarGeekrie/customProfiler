@@ -201,11 +201,21 @@ class profiler_collecteur(object):
                           "memory_peak": mem_peak,
                           "memory_peak_b": mem_peak_b})
     
+    def _write(self, toprint, end='\n'):
+        """print(), but never raise on a console that cannot represent ⚡
+        (cp1252 on Windows). One replacement char per character, so the columns
+        stay aligned."""
+        try :
+            print(toprint, end=end)
+        except UnicodeEncodeError:
+            encoding = getattr(sys.stdout, "encoding", None) or "ascii"
+            print(toprint.encode(encoding, "replace").decode(encoding), end=end)
+
     def _print(self, toprint, end='\n'):
         if self.logger:
             self.logger("  " + toprint)
         if self.forcePrintInCsl or not self.logger:
-            print(" ⚡" + toprint, end=end)
+            self._write(" ⚡" + toprint, end=end)
 
     def print_line(self, fname, delta_time, delta_mem, end='\n', color=""):
         delta_mem_str = " Δ " + f"{delta_mem:>7}"
@@ -278,7 +288,7 @@ class profiler_collecteur(object):
             self.logger("\n".join(logSummary[:-1]))
 
         if self.forcePrintInCsl or not self.logger:
-            print(self)
+            self._write(str(self))
 
     def __getitem__(self, key):
         try :

@@ -10,8 +10,6 @@ jobs:
   test:
     name: ${{ matrix.os }} · python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    env:
-      PYTHONIOENCODING: utf-8
     strategy:
       fail-fast: false
       matrix:

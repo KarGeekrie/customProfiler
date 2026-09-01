@@ -53,13 +53,13 @@ def pc(reset_collecteur):
 
 def _env(extra=None):
     env = dict(os.environ)
-    if extra:
-        env.update(extra)
     env["PYTHONPATH"] = os.pathsep.join(
         [str(REPO_ROOT)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
     )
     env["PYTHONIOENCODING"] = "utf-8"
     env.pop("PYTHONWARNINGS", None)
+    if extra:  # last, so a test can override PYTHONIOENCODING
+        env.update(extra)
     return env
 
 
@@ -84,7 +84,9 @@ def run_py(tmp_path):
         if not tty:
             proc = subprocess.run(
                 cmd, cwd=tmp_path, env=_env(env), timeout=timeout,
-                capture_output=True, text=True, encoding="utf-8",
+                # errors="replace": a snippet may deliberately run under another
+                # console encoding, and cp1252 "µs" is not valid utf-8
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
             if check:
                 assert proc.returncode == 0, proc.stderr

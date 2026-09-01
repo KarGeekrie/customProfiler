@@ -29,6 +29,9 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
 * **Per-line `save()` unbalanced the depth counter**, leaving it at `-4` after a
   three-line function and mis-indenting everything profiled afterwards.
 * The summary now comes from `atexit` in every case, never `__del__`.
+* **Printing no longer raises on a console that cannot represent ⚡** (cp1252,
+  the Windows default): the character degrades to a replacement, one per
+  character, so the columns stay aligned.
 * Nested Python calls are no longer traced in line mode, and `exception` events
   no longer close a statement (a `try`/`except` in the body double-counted).
 
