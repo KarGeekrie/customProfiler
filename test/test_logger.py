@@ -14,7 +14,7 @@ PROFILED = """
     from custom_profiler import profiler_collecteur as pc
     from custom_profiler.collecteur import Interactivity
 
-    logging.basicConfig(filename="out.log", filemode="w")
+    logging.basicConfig(filename="out.log", filemode="w", encoding="utf-8")
     pc.options(interactivity=Interactivity.MF_NO_INTERAC,
                use_logger=True,
                logger_name=" ⚡",
@@ -116,3 +116,62 @@ def test_bare_import_still_reports_the_global_timer(run_py):
     assert "customProfiler log" in out
     assert "global timer" in out
     assert "fct name" not in out
+
+
+def test_a_non_utf8_handler_mangles_the_lightning_bolt(run_py, tmp_path):
+    """basicConfig defaults to errors="backslashreplace", so on a cp1252 platform
+    (Windows) the records survive but the ⚡ is escaped. Hence the README telling
+    users to pass encoding="utf-8"."""
+    out = run_py(
+        """
+        import logging
+        from custom_profiler import profiler
+        from custom_profiler import profiler_collecteur as pc
+        from custom_profiler.collecteur import Interactivity
+
+        logging.basicConfig(filename="cp1252.log", filemode="w", encoding="cp1252")
+        pc.options(interactivity=Interactivity.DISABLE, use_logger=True)
+
+        @profiler
+        def my_func():
+            return 1
+
+        my_func()
+        print("DONE")
+        """
+    )
+    assert "DONE" in out
+    logged = (tmp_path / "cp1252.log").read_text(encoding="cp1252")
+    assert "my_func" in logged        # the record is not lost ...
+    assert "\\u26a1" in logged        # ... but the bolt is escaped
+    assert "⚡" not in logged
+
+
+def test_a_strict_handler_drops_the_records(run_py, tmp_path):
+    """A hand-built FileHandler defaults to strict: there the records *are* lost."""
+    out = run_py(
+        """
+        import logging
+        from custom_profiler import profiler
+        from custom_profiler import profiler_collecteur as pc
+        from custom_profiler.collecteur import Interactivity
+
+        handler = logging.FileHandler("strict.log", mode="w", encoding="cp1252")
+        logging.getLogger(" ⚡").addHandler(handler)
+        pc.options(interactivity=Interactivity.DISABLE, use_logger=True)
+
+        @profiler
+        def my_func():
+            return 1
+
+        my_func()
+        print("DONE")
+        """
+    )
+    assert "DONE" in out                                    # never raises
+    assert (tmp_path / "strict.log").read_text() == ""       # but nothing lands
+
+
+def test_utf8_handler_keeps_the_records(run_logged):
+    _, log = run_logged()
+    assert "⚡" in log

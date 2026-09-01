@@ -42,7 +42,7 @@ a = my_func_lbl()
 """
 import logging
 
-logging.basicConfig(filename='custom_profiler.log', filemode='w')
+logging.basicConfig(filename='custom_profiler.log', filemode='w', encoding='utf-8')
 
 loggername = " ⚡" # logger name
 addCustumLvl = False # add "PROFILER" level in logger

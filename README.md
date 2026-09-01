@@ -226,6 +226,11 @@ The other options allow you to activate a logger :
 `options()` only changes what you pass it: a partial call leaves every other option
 alone.
 
+Pass `encoding="utf-8"` to `logging.basicConfig`. The profiler logs the ⚡ character:
+on a platform whose default encoding cannot represent it (cp1252 on Windows) it comes
+out escaped as `\u26a1`, and a hand-built `FileHandler` — which defaults to strict
+error handling, unlike `basicConfig` — drops those records entirely, without raising.
+
 This example illustrates the loading of options in the profiler :
 
 ```python
@@ -235,7 +240,7 @@ import logging
 from custom_profiler import profiler, Interactivity
 from custom_profiler import profiler_collecteur as pc
 
-logging.basicConfig(filename="demologger.txt", filemode='w')
+logging.basicConfig(filename="demologger.txt", filemode='w', encoding="utf-8")
 
 pc.options(interactivity = Interactivity.AUTO # ENABLE / MF_NO_INTERAC / DISABLE / AUTO / OFF
            , use_logger = True

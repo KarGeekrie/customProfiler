@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:   # so a branch can be tested before it is merged
 
 jobs:
   test:

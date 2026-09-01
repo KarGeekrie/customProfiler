@@ -56,6 +56,9 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
   per-call list moved to `per_call_memory_b`. **This is the one change that can
   break code silently-ish** — `max(data["max_memory_b"])` now raises `TypeError`.
 * The printed banner says `memory peak`.
+* The logger examples pass `encoding="utf-8"` to `logging.basicConfig`: with the
+  platform default on Windows the ⚡ comes out as `\u26a1`, and a hand-built
+  `FileHandler` drops those records outright.
 * The line-by-line summary shows `+---` depth markers where it used to show
   `----`, now that the counter stays balanced.
 * Minimum Python is 3.9 (0.3 claimed 3.6, which was never tested).

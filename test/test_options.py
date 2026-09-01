@@ -136,7 +136,7 @@ def test_use_logger_downgrades_enable_to_mf_no_interac(run_py):
         from custom_profiler import profiler_collecteur as pc
         from custom_profiler.collecteur import Interactivity
 
-        logging.basicConfig(filename="out.log", filemode="w")
+        logging.basicConfig(filename="out.log", filemode="w", encoding="utf-8")
         pc.options(interactivity=Interactivity.ENABLE, use_logger=True)
         print("MODE", pc.interractivity)
         """
@@ -152,7 +152,7 @@ def test_configuring_the_logger_twice_is_idempotent(run_py):
         from custom_profiler import profiler_collecteur as pc
         from custom_profiler.collecteur import Interactivity
 
-        logging.basicConfig(filename="out.log", filemode="w")
+        logging.basicConfig(filename="out.log", filemode="w", encoding="utf-8")
         opts = dict(interactivity=Interactivity.DISABLE,
                     use_logger=True, add_custom_level=True)
         pc.options(**opts)

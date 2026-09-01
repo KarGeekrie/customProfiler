@@ -18,7 +18,7 @@ def options(filename='custom_profiler.log', # None = logger in csl ; False = log
               , no_summary_in_log = False)
 
     if filename:
-        logging.basicConfig(filename=filename, filemode='w')
+        logging.basicConfig(filename=filename, filemode='w', encoding='utf-8')
     else :
         logging.basicConfig()
 
