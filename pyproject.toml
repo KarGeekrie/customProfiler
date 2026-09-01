@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "custom_profiler"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Time and memory profiler"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -35,6 +35,9 @@ test = ["pytest"]
 [project.urls]
 Source = "https://github.com/KarGeekrie/customProfiler"
 "Bug Reports" = "https://github.com/KarGeekrie/customProfiler/issues"
+
+# the version is the git tag: nothing to bump in this file
+[tool.setuptools_scm]
 
 [tool.setuptools.packages.find]
 include = ["custom_profiler*"]

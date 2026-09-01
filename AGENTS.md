@@ -23,7 +23,7 @@ the sources.
 | `test/` | Automated `pytest` suite (see §6). |
 | `test/demo/` | Runnable snippets backing the README's output blocks — printed, not asserted; excluded from collection. |
 | `pyproject.toml` | **The** packaging file (PEP 621, setuptools backend) — and the pytest config (`[tool.pytest.ini_options]`). |
-| `MANIFEST.in` | Ships the test tree, LICENSE and CHANGELOG in the sdist. |
+| `MANIFEST.in` | Ships the test tree, LICENSE and CHANGELOG in the sdist — and prunes what setuptools-scm's file finder would otherwise add, the 557K demo gif above all. |
 | `.github/workflows/tests.yml` | CI: pytest on 3.9→3.13 × Linux/macOS/Windows, plus a build + `twine check` job. |
 | `utils/up_version.sh` | Tag + build + upload to PyPI. **Never run it.** |
 | `README.md` | The only user documentation. Must stay in sync with the printed output. |
@@ -231,9 +231,13 @@ interactivity or the summary — `AUTO` takes a different branch in each case.
 
 ## 7. Repo hygiene
 
-* Version lives in **`pyproject.toml` only** (`project.version`). Bumping it is what
-  drives `utils/up_version.sh` (git tag + PyPI upload), which reads it back with
-  `sed`. Never tag, publish, or run that script.
+* **The version is the git tag.** `pyproject.toml` declares `dynamic = ["version"]`
+  and setuptools-scm derives it, so there is no number to bump in any file — between
+  releases you get `0.3.1.dev13+g1782fb9`. `utils/up_version.sh X.Y.Z` creates the
+  tag and publishes. Never tag, publish, or run that script.
+* Anything that builds the package needs the **tags and full history**: that is why
+  CI checks out with `fetch-depth: 0`. A shallow clone silently produces a dev
+  version.
 * There is **no `setup.py` and no `setup.cfg`** — do not add one back. Build with
   `python -m build`; `pip install -e ".[test]"` is the dev install.
 * Every user-visible change needs a `CHANGELOG.md` entry.

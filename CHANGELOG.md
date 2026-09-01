@@ -65,6 +65,9 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
 * The line-by-line summary shows `+---` depth markers where it used to show
   `----`, now that the counter stays balanced.
 * Minimum Python is 3.9 (0.3 claimed 3.6, which was never tested).
+* The version is derived from the git tag by setuptools-scm (`dynamic = ["version"]`),
+  so there is no number to bump in a file. `utils/up_version.sh` takes it as an
+  argument now.
 
 ### Deprecated
 

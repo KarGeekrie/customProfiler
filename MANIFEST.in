@@ -3,4 +3,7 @@ include AGENTS.md
 include CHANGELOG.md
 include LICENSE
 recursive-include test *.py *.md
+prune gif
+prune utils
+prune .github
 prune test/__pycache__
