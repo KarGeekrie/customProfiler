@@ -42,10 +42,12 @@ def test_call_count_and_times(pc, capsys):
 
     data = pc["my_func"]
     assert data["nb_call"] == 3
-    # bracket the measured wall clock, never the nominal sleep: the recorded
-    # span sits strictly inside the window, and the sleeps dominate it
+    # two invariants that hold on any machine: the recorded span sits inside
+    # the measured window, and it covers the sleeps it contains, because
+    # time.sleep never returns early. Never a fraction of the window -- the
+    # profiler's own overhead can be most of it on a slow runner
     assert data["global_time_s"] <= wall
-    assert data["global_time_s"] > 0.5 * wall
+    assert data["global_time_s"] >= 3 * SLEEP * 0.95
     assert data["mean_time_s"] == pytest.approx(data["global_time_s"] / 3)
 
 
@@ -69,7 +71,7 @@ def test_context_manager_records_under_its_label(pc, capsys):
 
     assert pc["my_block"]["nb_call"] == 1
     assert pc["my_block"]["global_time_s"] <= wall
-    assert pc["my_block"]["global_time_s"] > 0.5 * wall
+    assert pc["my_block"]["global_time_s"] >= SLEEP * 0.95
 
 
 def test_nesting_is_recorded_as_depth(pc, capsys):
