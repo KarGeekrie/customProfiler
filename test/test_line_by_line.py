@@ -59,10 +59,14 @@ def test_no_peak_column_in_line_mode(run_py):
     assert not any("peak" in l for l in reported)
 
 
-def test_freed_memory_is_shown_as_a_negative_delta(run_py):
+def test_every_reported_line_carries_a_memory_delta(run_py):
+    """Not whether the delta is negative: whether `del` hands pages back to the
+    OS is the allocator's business, and on macOS it does not. The sign rendering
+    is covered by test_bytes2human."""
     out = run_py(SIMPLE)
     del_line = next(l for l in out.splitlines() if "del b" in l)
-    assert "Δ   -" in del_line or "Δ  -" in del_line
+    assert "consumes :  Δ" in del_line
+    assert "takes :" in del_line
 
 
 def test_return_value_is_preserved(run_py):

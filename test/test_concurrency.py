@@ -140,11 +140,16 @@ def test_a_second_top_level_call_is_still_timed(pc):
     def once():
         time.sleep(0.02)
 
+    start = time.perf_counter()
     once()
     once()
+    wall = time.perf_counter() - start
+
     data = pc["once"]
     assert data["nb_call"] == 2
-    assert data["global_time_s"] == pytest.approx(0.04, abs=0.05)
+    # both calls are timed, so the total tracks the wall clock of the pair --
+    # never the nominal sleep, which a loaded runner overshoots by 5x
+    assert data["global_time_s"] == pytest.approx(wall, abs=0.05)
     assert len(data["per_call_memory_b"]) == 2
 
 
