@@ -1,3 +1,4 @@
+import os
 import time
 import sys
 if sys.platform != 'win32':
@@ -18,6 +19,20 @@ from custom_profiler.human_readable_time import human_time_duration as htd
 
 # ru_maxrss is in kibibytes on Linux and in bytes on macOS/BSD
 RU_MAXRSS_UNIT = 1 if sys.platform == 'darwin' else 1024
+
+
+# CUSTOM_PROFILER=0 switches the package off whole: the decorators return the
+# function untouched (see _profiler) and no summary is registered, so a program
+# that merely imports custom_profiler writes nothing at all
+_OFF_VALUES = ("0", "false", "no", "off")
+DISABLED = os.environ.get("CUSTOM_PROFILER", "").strip().lower() in _OFF_VALUES
+
+
+# how often the watcher thread wakes up, and how often it samples memory and
+# repaints the interactive line. The sample rate is what the peak column is worth:
+# at the 1s default a call shorter than that is sampled once, at its very start
+DEFAULT_POLL_S    = 0.01
+DEFAULT_REFRESH_S = 1.
 
 
 class Interactivity(str, Enum):
@@ -96,11 +111,13 @@ class profiler_collecteur(object):
             self.noSummaryInLog = False
             self.loggername = " ⚡"
             self.lvl = 'INFO'
+            self.refresh_interval = DEFAULT_REFRESH_S
             # nesting depth and re-entrancy are per thread: two threads calling
             # the same profiled function are not nested inside one another
             self._local = threading.local()
             self._lock = threading.RLock()
-            atexit.register(self._instance._report_at_exit)
+            if not DISABLED:
+                atexit.register(self._instance._report_at_exit)
 
         return self._instance
 
@@ -315,6 +332,7 @@ class profiler_collecteur(object):
                 , profiler_level = _UNSET
                 , force_print_in_console = _UNSET
                 , no_summary_in_log = _UNSET
+                , refresh_interval = _UNSET
                 , **legacy):
         """Change the options you pass, and leave the others alone."""
 
@@ -324,7 +342,8 @@ class profiler_collecteur(object):
                  "add_custom_level": add_custom_level,
                  "profiler_level": profiler_level,
                  "force_print_in_console": force_print_in_console,
-                 "no_summary_in_log": no_summary_in_log}
+                 "no_summary_in_log": no_summary_in_log,
+                 "refresh_interval": refresh_interval}
 
         for old_name, new_name in _LEGACY_OPTIONS.items():
             if old_name in legacy :
@@ -350,6 +369,11 @@ class profiler_collecteur(object):
             self.noSummaryInLog = given["no_summary_in_log"]
         if given["logger_name"] is not _UNSET :
             self.loggername = given["logger_name"]
+        if given["refresh_interval"] is not _UNSET :
+            value = given["refresh_interval"]
+            assert isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0, \
+                f'refresh_interval {value} must be a number of seconds > 0'
+            self.refresh_interval = float(value)
 
         if given["use_logger"] is not _UNSET :
             if given["use_logger"] :

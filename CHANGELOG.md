@@ -29,6 +29,9 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
 * **Per-line `save()` unbalanced the depth counter**, leaving it at `-4` after a
   three-line function and mis-indenting everything profiled afterwards.
 * The summary now comes from `atexit` in every case, never `__del__`.
+* **`CUSTOM_PROFILER=0` now also silences the end-of-run summary.** It stripped the
+  decorators but still wrote a banner to stdout at exit, which corrupted the output
+  of any program that merely imported the package.
 * **Printing no longer raises on a console that cannot represent ⚡** (cp1252,
   the Windows default): the character degrades to a replacement, one per
   character, so the columns stay aligned.
@@ -56,6 +59,10 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
   no-op, so profiled code costs nothing in production.
 * `py.typed` and type hints on the public API.
 * `per_call_memory_b`, the per-call memory list.
+* `options(refresh_interval=…)`: how often the watcher samples memory and repaints,
+  one second by default. At that default a spike that opens and closes inside a
+  call is sampled zero times and `peak` just repeats `Δ`; lowering it is how you
+  get the real figure.
 * A test suite (`pytest`), and CI on Linux, macOS and Windows.
 
 ### Changed

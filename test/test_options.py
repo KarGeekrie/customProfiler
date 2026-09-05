@@ -1,6 +1,10 @@
 """`options()`, the Interactivity branches, and the legacy keyword aliases."""
 
+import time
+
 import pytest
+
+from custom_profiler import profiler
 
 from custom_profiler.collecteur import Interactivity
 
@@ -164,3 +168,53 @@ def test_configuring_the_logger_twice_is_idempotent(run_py):
         """
     )
     assert "SECOND ok" in out
+
+
+# --- refresh_interval --------------------------------------------------------
+
+def test_refresh_interval_defaults_to_one_second(pc):
+    assert pc.refresh_interval == 1.
+
+
+def test_refresh_interval_is_settable(pc):
+    pc.options(refresh_interval=0.05)
+    assert pc.refresh_interval == 0.05
+
+
+@pytest.mark.parametrize("bad", [0, -1, "fast", None, True])
+def test_refresh_interval_must_be_a_positive_number(pc, bad):
+    with pytest.raises(AssertionError, match="refresh_interval"):
+        pc.options(refresh_interval=bad)
+
+
+def test_refresh_interval_survives_a_partial_call(pc):
+    pc.options(refresh_interval=0.05)
+    pc.options(no_summary_in_log=True)
+    assert pc.refresh_interval == 0.05
+
+
+def test_a_lowered_interval_samples_more_often(pc, capsys, monkeypatch):
+    """The knob's contract is the sampling rate, so count the samples.
+
+    Not the peak value it happens to catch: whether a freed allocation shows up
+    as a drop in RSS is the allocator's business, and macOS keeps the pages.
+    """
+    samples = []
+    monkeypatch.setattr(pc, "thread_view", lambda fname, delta: samples.append(fname))
+
+    def work():
+        time.sleep(0.3)
+
+    pc.options(interactivity=Interactivity.MF_NO_INTERAC, refresh_interval=1.)
+    profiler(work, name="slow_sampling")()
+    slow = len(samples)
+
+    samples.clear()
+    pc.options(interactivity=Interactivity.MF_NO_INTERAC, refresh_interval=0.01)
+    profiler(work, name="fast_sampling")()
+    fast = len(samples)
+    capsys.readouterr()
+
+    assert slow <= 2        # the one immediate sample, and that is all
+    assert fast >= 3        # 0.3s / 0.01s, with room for a very slow runner
+    assert fast > slow

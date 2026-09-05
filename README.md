@@ -1,31 +1,84 @@
 # ⚡ custom_profiler ⚡
 
+[![PyPI](https://img.shields.io/pypi/v/custom-profiler)](https://pypi.org/project/custom-profiler/)
+[![Python](https://img.shields.io/pypi/pyversions/custom-profiler)](https://pypi.org/project/custom-profiler/)
+[![tests](https://github.com/KarGeekrie/customProfiler/actions/workflows/tests.yml/badge.svg)](https://github.com/KarGeekrie/customProfiler/actions/workflows/tests.yml)
+[![License](https://img.shields.io/pypi/l/custom-profiler)](https://github.com/KarGeekrie/customProfiler/blob/main/LICENSE)
+
 **custom_profiler** is a simple, interactive and lightweight (the only dependency is psutil) way of profiling the memory and execution time of your python code.
 
 <p align="center"><img src="https://raw.githubusercontent.com/KarGeekrie/customProfiler/main/gif/demoProf.gif"/></p>
 
-## Installation :
+## When to use this
 
-For user :
+This is **durable instrumentation**: you decorate the handful of functions you care
+about, leave the decorators in the code, and read the numbers in your logs, run after
+run, in production. It answers *is this still taking as long as it used to*.
+
+It is **not** a diagnostic profiler. To find out which function is slow in the first
+place, reach for the right tool and come back:
+
+| You want to | Use |
+|---|---|
+| find the hotspot in a run | `cProfile` + [snakeviz](https://jiffyclub.github.io/snakeviz/), or [py-spy](https://github.com/benfred/py-spy) on a live process |
+| know what actually allocates | [`tracemalloc`](https://docs.python.org/3/library/tracemalloc.html) or [memray](https://github.com/bloomberg/memray) — this package reports process RSS, not allocations |
+| time a small expression | `timeit` |
+| **keep watching a known hotspot, in your own logs** | **this** |
+
+One dependency (`psutil`), ships type hints (`py.typed`), Python 3.9+.
+
+## Installation
+
+For users:
 ```bash
 pip install custom-profiler 
-# it's also ok : pip install custom_profiler
+# it's also ok: pip install custom_profiler
 ```
 
-For devellopeur :
+For developers:
 ```bash
 git clone https://github.com/KarGeekrie/customProfiler.git
 pip install -e "customProfiler[test]"
 ```
 
-Run the test suite (the demo scripts of this README live in `test/demo/`) :
+The installed version is available as `custom_profiler.__version__`.
+
+Run the test suite (the demo scripts of this README live in `test/demo/`):
 ```bash
 cd customProfiler && pytest
 ```
 
-## Profil function :
+## Upgrading from 0.3
 
-For profil python function, just add *@profiler* :
+Every 0.3 name still works and raises a `DeprecationWarning`. They go away in 2.0.
+
+| 0.3 | 1.0 |
+|---|---|
+| `options(interractivity=…)` | `options(interactivity=…)` |
+| `options(useLogger=…)` | `options(use_logger=…)` |
+| `options(loggername=…)` | `options(logger_name=…)` |
+| `options(addCustumLvl=…)` | `options(add_custom_level=…)` |
+| `options(profilerlvl=…)` | `options(profiler_level=…)` |
+| `options(forcePrintInCsl=…)` | `options(force_print_in_console=…)` |
+| `options(noSummaryInLog=…)` | `options(no_summary_in_log=…)` |
+| `data["peack_memory"]` | `data["peak_memory"]` |
+| `info["memory_peack"]` | `info["memory_peak"]` |
+| `INTERACTIVITY_OPT_ENUM` | `Interactivity` |
+| `custom_profiler.custum_profiler` | `custom_profiler._profiler` |
+
+Two changes are **not** covered by an alias:
+
+* `max_memory_b` is now the maximum, in bytes, like every other `_b` key. The
+  per-call list moved to `per_call_memory_b`, so `max(data["max_memory_b"])` raises
+  `TypeError` instead of returning the wrong thing quietly.
+* `options()` no longer resets the options you leave out. It used to, because every
+  keyword had a concrete default.
+
+The full list is in [CHANGELOG.md](CHANGELOG.md).
+
+## Profile a function
+
+To profile a python function, just add *@profiler*:
 ```python
 import time
 from custom_profiler import profiler
@@ -44,7 +97,17 @@ b = my_func()
 c = my_func()
 ```
 
-Your log :
+Give an entry a name of your own with `name=`, on either decorator — useful when the
+function name is not what you want to read in the log, or when the same function is
+profiled from two places:
+
+```python
+@profiler(name="load the config")
+def _load():
+    ...
+```
+
+Your log:
 ```bash
  ⚡ my_func                                       | takes :        4.14s  | consumes :  Δ    7.8M / peak  160.2M
  ⚡ my_func                                       | takes :        4.15s  | consumes :  Δ    7.6M / peak  160.2M
@@ -58,9 +121,61 @@ Your log :
  ⚡⚡⚡⚡⚡⚡⚡⚡
 ```
 
-## Profil row code (with context managers) :
+## Reading the output
 
-Profil row code with minimal impact :
+Two things get printed: one line per call as it finishes, and one summary table at
+the end of the run.
+
+**The line**, printed when a call returns:
+
+```bash
+ ⚡ my_func                                       | takes :        4.14s  | consumes :  Δ    7.8M / peak  160.2M
+```
+
+* the **name** — the function's, or the label given to `magic_profiler` / `name=`
+* **takes** — wall time of that call
+* **Δ** — process RSS when the call returned, minus RSS when it started. Exact, but
+  it is the whole process, not your function: see [Limitations](#limitations)
+* **peak** — the highest `Δ` the watcher thread saw *during* the call. Only shown
+  when a watcher ran, and sampled once a second by default — see
+  `refresh_interval` and [Limitations](#limitations). Absent in line-by-line mode
+
+Nested calls are indented two spaces per level, `┌─` opening a group and `├─`
+marking a sibling at the same level:
+
+```bash
+ ⚡ my_code_to_prof                               | takes :        3.13s  | consumes :  Δ    7.9M / peak  160.2M
+ ⚡   ┌─big list                                  | takes :       65.92ms | consumes :  Δ  160.1M / peak  160.1M
+```
+
+**The summary table**, printed once at exit:
+
+```bash
+ ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        7.31s  / memory peak   182.6M
+ ⚡⚡⚡⚡⚡⚡⚡⚡
+ ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
+ ⚡ ============================================================================================================
+ ⚡ +---             my_code_to_prof              |    1    |        3.13s  /        3.13s  |    7.9M  /  160.2M
+ ⚡ -+--                 big list                 |    1    |       65.92ms /       65.92ms |  160.1M  /  160.1M
+```
+
+* **`+---`**, before the name, is the **depth marker**. Four slots, one per nesting
+  level 0 to 3, `+` where this entry was seen at that depth. `+---` ran at top
+  level, `-+--` always one level deep, `++--` both — a function called directly
+  *and* from inside another profiled one. Deeper than 3 is not shown
+* **Nb call** — how many times it ran. For a recursive function this counts every
+  entry, while the time counts only the outermost (see [Limitations](#limitations))
+* **time : mean / global** — per call, then the total
+* **mem. max : Δ** — the largest `Δ` across calls
+* **/ Th** — the largest value seen including the watcher **Th**read's samples: the
+  same as `Δ` when no peak was caught, higher when one was
+
+The header line carries the run totals: wall time since `import custom_profiler`,
+and the process memory high-water mark.
+
+## Profile raw code (with context managers)
+
+Profile raw code with minimal impact:
 
 ```python
 import time
@@ -85,7 +200,7 @@ def my_func():
 a = my_func()
 ```
 
-Your log :
+Your log:
 ```bash
  ⚡ my_code_to_prof                               | takes :        3.13s  | consumes :  Δ    7.9M / peak  160.2M
  ⚡   ┌─big list                                  | takes :       65.92ms | consumes :  Δ  160.1M / peak  160.1M
@@ -101,15 +216,37 @@ Your log :
  ⚡⚡⚡⚡⚡⚡⚡⚡
 ```
 
-## Access to profiler data :
+## Access to profiler data
 
-You cannot access profiler data by requesting it from `profiler_collecteur["my_function_name"]`. For a function (or a part of code profiled with context managers), available data are:
+You can access profiler data by requesting it from `profiler_collecteur["my_function_name"]`. For a function (or a part of code profiled with context managers), available data are:
 * *nb_call*: number of times the function is called
 * *global_time* / *global_time_s*: total time spent in the function (as a string or in seconds)
 * *mean_time* / *mean_time_s*: mean time spent in the function (= global_time / nb_call)
 * *max_memory* / *max_memory_b*: maximum memory used by the function (as a string or in bytes)
 * *per_call_memory_b*: the memory consumed by each individual call, in bytes
 * *peak_memory* / *peak_memory_b*: similar to max_memory, but provides access to thread data. Threads can detect memory peaks during the function execution. *max_memory* only computes the delta memory between the start and end of the function.
+
+`profiler_collecteur` is a mapping, so you do not need to know the names in advance:
+
+```python
+from custom_profiler import profiler_collecteur as pc
+
+len(pc)                       # how many things were profiled
+"my_func" in pc               # was this one ever called
+for name in pc:               # every name, in the order first seen
+    print(name, pc[name]["global_time"])
+
+pc.keys(), pc.items(), pc.values()
+
+pc.to_dict()                  # everything at once, as plain dicts:
+                              # {"global_info": {...}, "profiled": {name: {...}}}
+pc.reset()                    # drop the measurements and start a new phase.
+                              # The global timer keeps running.
+```
+
+`to_dict()` is the export path — it is JSON-serialisable, so writing a run to a file
+is one line. `reset()` is how you profile a long process in phases rather than as one
+average.
 
 Global data is also available with `profiler_collecteur.get_global_info()`:
 * *global_run_time* / *global_run_time_s*: global time since `import custom_profiler` (as a string or in seconds)
@@ -132,7 +269,7 @@ pprint.pprint(pc["my_code_to_prof"])
 pprint.pprint(pc.get_global_info())
 ```
 
-Your log :
+Your log:
 ```bash
 [...]
 >>> pprint.pprint(pc["my_code_to_prof"])
@@ -154,9 +291,9 @@ Your log :
 [...]
 ```
 
-## Profil line by line :
+## Profile line by line
 
-For profil python function line by line, just add *@profiler_lbl* (follow memory peak is Not Avail in this case) :
+To profile a python function line by line, just add *@profiler_lbl* (no memory peak in this mode):
 ```python
 import time
 from custom_profiler import profiler_lbl
@@ -173,7 +310,7 @@ def my_func():
 a = my_func()
 ```
 
-Your log :
+Your log:
 ```bash
  ⚡ ⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡⚡ line per line : my_func from [...]/customProfiler/test/demo/prof_lbl.py
  ⚡ l 6       a = [1] * (10 ** 6)                 | takes :        3.41ms | consumes :  Δ    7.9M
@@ -199,9 +336,9 @@ Your log :
  ⚡⚡⚡⚡⚡⚡⚡⚡
 ```
 
-## Options and logger :
+## Options and logger
 
-The profiler uses thread to monitor memory evolution and offert interactive report (follow time and memory). Thread options are :
+The profiler uses a thread to monitor memory evolution and offers an interactive report (following time and memory). Thread options are:
 
 ```python
 class Interactivity(str, Enum) :
@@ -212,8 +349,14 @@ class Interactivity(str, Enum) :
     OFF           = "OFF"           # record nothing at all
 ```
 
-Setting `CUSTOM_PROFILER=0` in the environment removes the decorators entirely, so
-profiled code costs nothing in production.
+Setting `CUSTOM_PROFILER=0` in the environment switches the package off whole: the
+decorators return your function untouched, and nothing is printed at exit. A program
+that ships profiled code and runs with the variable set writes nothing at all, so its
+own output stays pipeable.
+
+Without it, note that importing `custom_profiler` is enough to get the summary on
+stdout when the process ends, even if you never profile anything. Send it to a logger
+with `use_logger` if that is in the way.
 
 The other options allow you to activate a logger :
 * *use_logger* : put log in a logger, default : *False*
@@ -222,6 +365,8 @@ The other options allow you to activate a logger :
 * *profiler_level* : logging level, default : *25*
 * *force_print_in_console* : if the logger is enabled, force print in the console and in the logger. Default: False
 * *no_summary_in_log* : if the logger is enabled, disable the profiler summary in the logger. Default: False
+* *refresh_interval* : how often, in seconds, the watcher thread samples memory and
+  repaints the interactive line. Default: *1.0*
 
 `options()` only changes what you pass it: a partial call leaves every other option
 alone.
@@ -231,7 +376,7 @@ on a platform whose default encoding cannot represent it (cp1252 on Windows) it 
 out escaped as `\u26a1`, and a hand-built `FileHandler` — which defaults to strict
 error handling, unlike `basicConfig` — drops those records entirely, without raising.
 
-This example illustrates the loading of options in the profiler :
+This example illustrates the loading of options in the profiler:
 
 ```python
 import time
@@ -250,7 +395,7 @@ pc.options(interactivity = Interactivity.AUTO # ENABLE / MF_NO_INTERAC / DISABLE
            , force_print_in_console = True
            , no_summary_in_log = False)
 
-#[... run your code to profil...]
+#[... run the code you want to profile ...]
 @profiler
 def my_func():
     a = [1] * (10 ** 6)
@@ -263,7 +408,7 @@ def my_func():
 a = my_func()
 ```
 
-Your bash log :
+Your bash log:
 ```bash
  ⚡ my_func                                       | takes :        6.13s  | consumes :  Δ    7.9M / peak  160.5M
 
@@ -275,7 +420,7 @@ Your bash log :
  ⚡⚡⚡⚡⚡⚡⚡⚡
 ```
 
-Your log in file *demologger.txt* :
+Your log in file *demologger.txt*:
 ```bash
 PROFILER: ⚡:   my_func                                       | takes :        6.13s  | consumes :  Δ    7.9M / peak  160.3M
 PROFILER: ⚡:
@@ -286,10 +431,24 @@ PROFILER: ⚡:
           ⚡:   +---                 my_func                  |    1    |        6.13s  /        6.13s  |    7.9M  /  160.3M
 ```
 
-## Limitations :
+## Limitations
 
-Worth knowing before you trust a number :
+Worth knowing before you trust a number:
 
+* **`async def` and generator functions are not measured.** The decorator times the
+  creation of the coroutine or generator object, not its execution, so it reports
+  microseconds for work that took seconds — silently, and the number looks
+  plausible:
+
+  ```
+  async def slow():  await asyncio.sleep(0.3)   # real 0.301s, reported 0.000002s
+  ```
+
+  Wrap the `await` in `magic_profiler` instead, or profile the synchronous function
+  underneath. Support is not planned for 1.x: the semantics under concurrency need
+  deciding first, since wall time across an `await` includes time spent yielded to
+  the event loop, so concurrent tasks would each report the full span and the sum
+  would exceed the run time.
 * **Memory is the process RSS**, not your function's allocations. Anything else
   running in the process — another thread, a garbage collection, an import — lands
   in the delta. Freed memory often stays in the allocator, so a `del` may show no
@@ -299,29 +458,54 @@ Worth knowing before you trust a number :
 * **A recursive function is timed by its outermost call.** `nb_call` counts every
   entry, `global_time` counts the seconds it was on the stack, once.
 * **`@profiler_lbl` uses `sys.settrace`**, so it cannot share a process with a
-  debugger or with `coverage`, and it makes the traced function much slower. It
-  follows only the decorated function, not the functions it calls, and reports no
-  memory peak.
-* **The memory peak is sampled once per second** by the watcher thread, so a
-  spike inside a fast function can be missed. The `Δ` column is exact; the `peak`
-  column is a best effort.
+  debugger or with `coverage`. It leaves theirs alone rather than fighting it, which
+  means it reports **nothing at all** in that situation rather than breaking them —
+  if a line-by-line run prints no lines, that is why. It also makes the traced
+  function much slower, follows only the decorated function and not the functions it
+  calls, and reports no memory peak.
+* **The memory peak is sampled once per second** by the watcher thread. Below about
+  two seconds per call, treat `peak` as indicative and trust only `Δ`: a spike that
+  opens and closes inside the call is sampled zero times, and `peak` then just
+  repeats `Δ`. Lower `refresh_interval` when you need the real figure —
+  a transient 160 MB allocation inside a 450 ms call, measured on Linux:
+
+  ```
+  refresh_interval = 1.0    Δ =  20.0K   peak =  20.0K     # never sampled
+  refresh_interval = 0.02   Δ =  20.0K   peak = 152.6M     # caught
+  ```
+
+  On a platform whose allocator keeps the freed pages, `Δ` would report them too
+  and the gap would be smaller — the sampling rate is the part you control.
+
+  The cost is one `memory_info()` read per interval, and a faster repaint of the
+  interactive line when it is on.
 * The profiler itself costs time. For microbenchmarks, use `timeit`.
 
-## Row profiler:
+## Raw profiler
 
-If you don't want any dependencies, simply copy the following code:
+If you would rather not add a dependency on this package, copy the following instead.
+It still needs `psutil` — that is where the memory readings come from — but it is
+self-contained and has no other moving parts.
 
 ```python
 import functools
 import time
 import sys
 import psutil
-from psutil._common import bytes2human
 
 if sys.platform != 'win32':
     import resource
 
 process = psutil.Process()
+
+_UNITS = ('B', 'K', 'M', 'G', 'T', 'P')
+
+def bytes2human(nbytes):
+    for i in range(len(_UNITS) - 1, 0, -1):
+        step = 1 << (i * 10)
+        if abs(nbytes) >= step:
+            return f"{nbytes / step:.1f}{_UNITS[i]}"
+    return f"{nbytes:.1f}B"
 
 dicoPerf = {}
 
@@ -356,7 +540,7 @@ class magic_profiler():
         end_time = time.perf_counter()
         end_mem = process.memory_info().rss
         nplog = (end_time - self.start_time, end_mem - self.start_mem)
-        if self.name in dicoPerf.keys():
+        if self.name in self.dicoPerf.keys():
             self.dicoPerf[self.name] += [nplog]
         else:
             self.dicoPerf[self.name] = [nplog]
@@ -397,7 +581,7 @@ def postProLogPerf(dicoPerf):
     return dicoLog
 
 #############
-#Use exemple:
+#Use example:
 
 with magic_profiler("time.sleep", dicoPerf):
     time.sleep(2)
@@ -412,3 +596,7 @@ dodo()
 postProLogPerf(dicoPerf)
 print(gi)
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
