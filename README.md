@@ -470,8 +470,9 @@ Worth knowing before you trust a number:
   async def slow():  await asyncio.sleep(0.3)   # real 0.301s, reported 0.000002s
   ```
 
-  Wrap the `await` in `magic_profiler` instead, or profile the synchronous function
-  underneath. Support is not planned for 1.x: the semantics under concurrency need
+  Decorating one raises a `RuntimeWarning` at the decoration site, so you find out
+  when you write it rather than when you trust the number. Wrap the `await` in
+  `magic_profiler` instead, or profile the synchronous function underneath. Support is not planned for 1.x: the semantics under concurrency need
   deciding first, since wall time across an `await` includes time spent yielded to
   the event loop, so concurrent tasks would each report the full span and the sum
   would exceed the run time.
@@ -486,7 +487,8 @@ Worth knowing before you trust a number:
 * **`@profiler_lbl` uses `sys.settrace`**, so it cannot share a process with a
   debugger or with `coverage`. It leaves theirs alone rather than fighting it, which
   means it reports **nothing at all** in that situation rather than breaking them —
-  if a line-by-line run prints no lines, that is why. It also makes the traced
+  and says so with a `RuntimeWarning`, since a silent empty report is worse than a
+  noisy one. Its own timing is still recorded. It also makes the traced
   function much slower, follows only the decorated function and not the functions it
   calls, and reports no memory peak.
 * **The memory peak is sampled once per second** by the watcher thread. Below about

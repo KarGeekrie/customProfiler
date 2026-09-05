@@ -300,3 +300,91 @@ def test_the_shim_still_takes_the_0_3_positional_call():
 
     assert legacy(raw, False)() == 1
     assert legacy(raw)() == 1
+
+
+# --- what the profiler cannot measure ----------------------------------------
+
+def test_decorating_a_coroutine_warns(pc):
+    with pytest.warns(RuntimeWarning, match="coroutine function"):
+        @profiler
+        async def slow():
+            pass
+
+
+def test_decorating_a_generator_warns(pc):
+    with pytest.warns(RuntimeWarning, match="generator function"):
+        @profiler
+        def gen():
+            yield 1
+
+
+def test_decorating_an_async_generator_warns(pc):
+    with pytest.warns(RuntimeWarning, match="async generator function"):
+        @profiler
+        async def agen():
+            yield 1
+
+
+def test_the_named_form_warns_too(pc):
+    with pytest.warns(RuntimeWarning, match="coroutine function"):
+        @profiler(name="label")
+        async def slow():
+            pass
+
+
+def test_the_line_decorator_warns_too(pc):
+    with pytest.warns(RuntimeWarning, match="coroutine function"):
+        @profiler_lbl
+        async def slow():
+            pass
+
+
+def test_an_ordinary_function_does_not_warn(pc, recwarn):
+    @profiler
+    def plain():
+        return 1
+
+    plain()
+    assert [w for w in recwarn if issubclass(w.category, RuntimeWarning)] == []
+
+
+def test_the_warning_points_at_the_decoration_site(pc):
+    with pytest.warns(RuntimeWarning) as caught:
+        @profiler
+        async def slow():
+            pass
+
+    assert caught[0].filename == __file__      # not inside custom_profiler/
+
+
+def test_a_foreign_tracer_warns_and_reports_no_lines(pc, capsys):
+    """Under coverage or a debugger we leave their tracer alone, so we see
+    nothing -- which is worth saying out loud."""
+    import sys
+    sys.settrace(lambda frame, event, arg: None)
+    try:
+        @profiler_lbl
+        def traced():
+            return 1
+
+        with pytest.warns(RuntimeWarning, match="another tracer is installed"):
+            assert traced() == 1
+    finally:
+        sys.settrace(None)
+    capsys.readouterr()
+
+    assert "traced" in pc                       # its own timing is still there
+    assert not [k for k in pc.keys() if " l " in k]
+
+
+def test_a_recursive_line_profiled_call_does_not_warn(pc, capsys, recwarn):
+    """Our own tracer is not "another tracer": the inner frame must stay quiet."""
+    @profiler_lbl
+    def rec(n):
+        if n:
+            rec(n - 1)
+        return n
+
+    rec(2)
+    capsys.readouterr()
+    assert [w for w in recwarn if "another tracer" in str(w.message)] == []

@@ -4,6 +4,15 @@
 
 ### Added
 
+* **Decorating an `async def`, a generator or an async generator now raises a
+  `RuntimeWarning`** at the decoration site. The profiler times the creation of
+  the object, not its execution, and reports microseconds for work that takes
+  seconds — a plausible-looking number that documentation alone does not protect
+  anyone from.
+* `@profiler_lbl` warns when another tracer is already installed (a debugger, or
+  `coverage`). It leaves theirs alone, so it reports no lines at all, and a silent
+  empty report is worse than a noisy one.
+
 * **Per-call times.** `save()` kept memory per call but time only as a running
   total, so the summary could offer nothing but a mean — which hides exactly the
   tail you are looking for. New in the data: `max_time` / `max_time_s`,
