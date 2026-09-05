@@ -161,3 +161,6 @@ cython_debug/
 
 # personal working draft, not part of the project
 custom_profiler/doto.md
+
+# recording artefact for gif/demoProf.gif
+demo.cast
