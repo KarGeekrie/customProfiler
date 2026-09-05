@@ -115,9 +115,9 @@ Your log:
 
  ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer       12.49s  / memory peak   190.1M
  ⚡⚡⚡⚡⚡⚡⚡⚡
- ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
+ ⚡                   fct name                    | Nb call |   time : max / global         | mem. max :  Δ / Th
  ⚡ ============================================================================================================
- ⚡ +---                 my_func                  |    3    |        4.15s  /       12.44s  |    7.8M  /  160.2M
+ ⚡ +---                 my_func                  |    3    |        4.16s  /       12.44s  |    7.8M  /  160.2M
  ⚡⚡⚡⚡⚡⚡⚡⚡
 ```
 
@@ -153,7 +153,7 @@ marking a sibling at the same level:
 ```bash
  ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        7.31s  / memory peak   182.6M
  ⚡⚡⚡⚡⚡⚡⚡⚡
- ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
+ ⚡                   fct name                    | Nb call |   time : max / global         | mem. max :  Δ / Th
  ⚡ ============================================================================================================
  ⚡ +---             my_code_to_prof              |    1    |        3.13s  /        3.13s  |    7.9M  /  160.2M
  ⚡ -+--                 big list                 |    1    |       65.92ms /       65.92ms |  160.1M  /  160.1M
@@ -165,7 +165,12 @@ marking a sibling at the same level:
   *and* from inside another profiled one. Deeper than 3 is not shown
 * **Nb call** — how many times it ran. For a recursive function this counts every
   entry, while the time counts only the outermost (see [Limitations](#limitations))
-* **time : mean / global** — per call, then the total
+* **time : max / global** — the slowest single call, then the total. The mean is
+  deliberately not shown: it is `global / Nb call`, both of which are on the line,
+  while the worst call is not reconstructible from anything else — and it is the
+  number a mean hides. Pick another with
+  `options(summary_time=…)`: `"mean"`, `"max"`, `"median"`, `"p95"`, or a tuple of
+  them such as `("mean", "max")`, which widens the column
 * **mem. max : Δ** — the largest `Δ` across calls
 * **/ Th** — the largest value seen including the watcher **Th**read's samples: the
   same as `Δ` when no peak was caught, higher when one was
@@ -208,7 +213,7 @@ Your log:
 
  ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        7.31s  / memory peak   182.6M
  ⚡⚡⚡⚡⚡⚡⚡⚡
- ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
+ ⚡                   fct name                    | Nb call |   time : max / global         | mem. max :  Δ / Th
  ⚡ ============================================================================================================
  ⚡ +---             my_code_to_prof              |    1    |        3.13s  /        3.13s  |    7.9M  /  160.2M
  ⚡ -+--                 big list                 |    1    |       65.92ms /       65.92ms |  160.1M  /  160.1M
@@ -222,6 +227,11 @@ You can access profiler data by requesting it from `profiler_collecteur["my_func
 * *nb_call*: number of times the function is called
 * *global_time* / *global_time_s*: total time spent in the function (as a string or in seconds)
 * *mean_time* / *mean_time_s*: mean time spent in the function (= global_time / nb_call)
+* *max_time* / *max_time_s*: the slowest single call
+* *median_time_s* / *p95_time_s*: the typical call, and the tail. Beyond
+  *max_samples* calls these come from the first samples kept; the mean, total and
+  maximum stay exact
+* *per_call_time_s*: the duration of each individual call, in seconds
 * *max_memory* / *max_memory_b*: maximum memory used by the function (as a string or in bytes)
 * *per_call_memory_b*: the memory consumed by each individual call, in bytes
 * *peak_memory* / *peak_memory_b*: similar to max_memory, but provides access to thread data. Threads can detect memory peaks during the function execution. *max_memory* only computes the delta memory between the start and end of the function.
@@ -324,7 +334,7 @@ Your log:
 
  ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        4.15s  / memory peak   175.1M
  ⚡⚡⚡⚡⚡⚡⚡⚡
- ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
+ ⚡                   fct name                    | Nb call |   time : max / global         | mem. max :  Δ / Th
  ⚡ ============================================================================================================
  ⚡ +---              my_func l 6                 |    1    |       11.14ms /       11.14ms |    7.6M  /    7.6M
  ⚡ +---              my_func l 7                 |    1    |      156.92ms /      156.92ms |  152.6M  /  152.6M
@@ -367,6 +377,11 @@ The other options allow you to activate a logger :
 * *no_summary_in_log* : if the logger is enabled, disable the profiler summary in the logger. Default: False
 * *refresh_interval* : how often, in seconds, the watcher thread samples memory and
   repaints the interactive line. Default: *1.0*
+* *summary_time* : which per-call time statistic the summary shows before the total.
+  One of `"mean"`, `"max"`, `"median"`, `"p95"`, or a tuple of them. Default: *("max",)*
+* *max_samples* : how many per-call samples to keep per entry, feeding
+  `median_time_s` and `p95_time_s`. The call count, total and maximum stay exact
+  beyond it. Default: *100000*
 
 `options()` only changes what you pass it: a partial call leaves every other option
 alone.
@@ -414,7 +429,7 @@ Your bash log:
 
  ⚡⚡⚡⚡⚡⚡⚡⚡ customProfiler log : global timer        6.16s  / memory peak   174.8M
  ⚡⚡⚡⚡⚡⚡⚡⚡
- ⚡                   fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
+ ⚡                   fct name                    | Nb call |   time : max / global         | mem. max :  Δ / Th
  ⚡ ============================================================================================================
  ⚡ +---                 my_func                  |    1    |        6.13s  /        6.13s  |    7.9M  /  160.5M
  ⚡⚡⚡⚡⚡⚡⚡⚡
@@ -426,7 +441,7 @@ PROFILER: ⚡:   my_func                                       | takes :        
 PROFILER: ⚡:
           ⚡:   customProfiler log : global timer        6.13s  / memory peak   175.3M
           ⚡:
-          ⚡:                     fct name                    | Nb call |   time : mean / global        | mem. max :  Δ / Th
+          ⚡:                     fct name                    | Nb call |   time : max / global         | mem. max :  Δ / Th
           ⚡:   ============================================================================================================
           ⚡:   +---                 my_func                  |    1    |        6.13s  /        6.13s  |    7.9M  /  160.3M
 ```

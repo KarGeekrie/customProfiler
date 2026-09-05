@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+* **Per-call times.** `save()` kept memory per call but time only as a running
+  total, so the summary could offer nothing but a mean — which hides exactly the
+  tail you are looking for. New in the data: `max_time` / `max_time_s`,
+  `median_time_s`, `p95_time_s`, `per_call_time_s`.
+* `options(max_samples=…)`, default 100000. A python float in a list costs ~32
+  bytes, so uncapped lists would reach 320 MB per function after 10 M calls, and
+  twice that with memory: the profiler would become the memory problem it is meant
+  to diagnose. Count, total and maximum stay exact beyond the cap; only the
+  distribution behind `median_time_s` and `p95_time_s` is sampled.
+* `options(summary_time=…)` picks the time statistic the summary shows —
+  `"mean"`, `"max"`, `"median"`, `"p95"`, or a tuple of them, which widens the
+  column and the rule to match.
+
+### Changed
+
+* **The summary's time column now shows `max / global`, not `mean / global`.** The
+  mean is `global / Nb call` and both are on the line; the worst call is not
+  reconstructible from anything else. On a real run of 208 calls, 8 of them slow,
+  the mean read 40 ms while the worst call took 740 ms. The header names the
+  column, so the change announces itself in the output. `summary_time="mean"`
+  restores the old reading.
+* `profData[name]["deep"]` is a set, not a list. Only the set of depths was ever
+  used, and it was a third list growing one entry per call.
+
 ## 1.0.0
 
 First stable release. Every 0.3 name still works; the misspelled ones now raise

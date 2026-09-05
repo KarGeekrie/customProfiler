@@ -80,7 +80,7 @@ def test_summary_header_columns(pc):
     pc.save("f", 1.0, 0)
     header = next(l for l in str(pc).splitlines() if "fct name" in l)
     assert "Nb call" in header
-    assert "time : mean / global" in header
+    assert "time : max / global" in header      # max by default, not mean
     assert "mem. max :  Δ / Th" in header
 
 
@@ -133,3 +133,78 @@ def test_output_survives_a_console_that_cannot_print_the_bolt(run_py):
     assert "my_func" in out
     assert "?" in out                        # with the bolt replaced
     assert "Traceback" not in out
+
+
+# --- the time column ---------------------------------------------------------
+
+def _summary_row(pc, name):
+    return next(l for l in str(pc).splitlines() if name in l and "+" in l)
+
+
+def test_the_summary_shows_the_worst_call_not_the_mean(pc):
+    """208 calls at 12ms and 8 at 740ms: the mean says 40ms and hides the tail."""
+    for _ in range(200):
+        pc.incr()
+        pc.save("f", 0.012, 0)
+    for _ in range(8):
+        pc.incr()
+        pc.save("f", 0.740, 0)
+
+    time_field = _summary_row(pc, "f").split("|")[2]
+    shown, total = [c.strip() for c in time_field.split("/")]
+    assert shown == "740.00ms"          # the worst call
+    assert total == "8.32s"             # not the mean, which is 40.00ms
+
+    pc.options(summary_time="mean")
+    time_field = _summary_row(pc, "f").split("|")[2]
+    assert time_field.split("/")[0].strip() == "40.00ms"
+
+
+def test_the_time_column_is_selectable(pc):
+    for _ in range(10):
+        pc.incr()
+        pc.save("f", 0.1, 0)
+    pc.incr()
+    pc.save("f", 0.5, 0)
+
+    pc.options(summary_time="mean")
+    assert "time : mean / global" in str(pc)
+
+    pc.options(summary_time=("median", "p95"))
+    header = next(l for l in str(pc).splitlines() if "fct name" in l)
+    assert "time : median / p95 / global" in header
+
+
+def test_extra_columns_widen_the_rule_to_match(pc):
+    pc.incr()
+    pc.save("f", 0.1, 0)
+
+    def widths():
+        lines = str(pc).splitlines()
+        header = next(l for l in lines if "fct name" in l)
+        rule = next(l for l in lines if "===" in l)
+        row = _summary_row(pc, "f")
+        return len(header), len(rule), len(row)
+
+    pc.options(summary_time=("max",))
+    one = widths()
+    assert one[0] == one[2]                      # header and row line up
+
+    pc.options(summary_time=("mean", "max"))
+    two = widths()
+    assert two[2] == one[2] + 16                 # one more 13-char field plus " / "
+    assert two[1] == one[1] + 16                 # and the rule follows
+    assert two[0] == two[2]
+
+
+def test_the_default_stays_a_108_character_rule(pc):
+    pc.incr()
+    pc.save("f", 0.1, 0)
+    rule = next(l for l in str(pc).splitlines() if "===" in l)
+    assert rule.count("=") == 108
+
+
+@pytest.mark.parametrize("bad", [(), "p50", ("max", "p50"), 42])
+def test_summary_time_rejects_unknown_statistics(pc, bad):
+    with pytest.raises((AssertionError, TypeError), match="summary_time|iterable|argument"):
+        pc.options(summary_time=bad)

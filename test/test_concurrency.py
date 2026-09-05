@@ -33,7 +33,7 @@ def test_concurrent_calls_are_not_nested(pc):
         t.join()
 
     assert pc["work"]["nb_call"] == 4
-    assert pc.profData["work"]["deep"] == [0, 0, 0, 0]
+    assert pc.profData["work"]["deep"] == {0}   # four top-level calls, one depth
 
 
 def test_each_thread_keeps_its_own_depth(pc):
@@ -52,8 +52,8 @@ def test_each_thread_keeps_its_own_depth(pc):
         t.join()
 
     assert seen == {"a": 0, "b": 0}
-    assert pc.profData["inner_a"]["deep"] == [1]
-    assert pc.profData["inner_b"]["deep"] == [1]
+    assert pc.profData["inner_a"]["deep"] == {1}
+    assert pc.profData["inner_b"]["deep"] == {1}
 
 
 def test_the_main_thread_depth_is_untouched_by_workers(pc):
@@ -132,7 +132,7 @@ def test_recursion_leaves_the_depth_counter_balanced(pc):
 
     fib(4)
     assert pc.deep[0] == -1
-    assert pc.profData["fib"]["deep"] == [0]
+    assert pc.profData["fib"]["deep"] == {0}
 
 
 def test_a_second_top_level_call_is_still_timed(pc):
@@ -169,7 +169,7 @@ def test_mutual_recursion_is_timed_per_name(pc):
     ping(4)
     assert pc["ping"]["nb_call"] == 3
     assert pc["pong"]["nb_call"] == 2
-    assert pc.profData["ping"]["deep"] == [0]
+    assert pc.profData["ping"]["deep"] == {0}
 
 
 def test_recursive_context_manager(pc):
@@ -180,4 +180,4 @@ def test_recursive_context_manager(pc):
 
     walk(3)
     assert pc["walk"]["nb_call"] == 4
-    assert pc.profData["walk"]["deep"] == [0]
+    assert pc.profData["walk"]["deep"] == {0}

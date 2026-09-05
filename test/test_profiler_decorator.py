@@ -83,8 +83,8 @@ def test_nesting_is_recorded_as_depth(pc, capsys):
     outer()
     capsys.readouterr()
 
-    assert pc.profData["outer"]["deep"] == [0]
-    assert pc.profData["inner"]["deep"] == [1]
+    assert pc.profData["outer"]["deep"] == {0}
+    assert pc.profData["inner"]["deep"] == {1}
 
 
 def test_depth_returns_to_the_baseline(pc, capsys):

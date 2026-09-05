@@ -1,6 +1,8 @@
 import os
 import time
 import sys
+import math
+import statistics
 if sys.platform != 'win32':
     import resource
 import logging
@@ -33,6 +35,34 @@ DISABLED = os.environ.get("CUSTOM_PROFILER", "").strip().lower() in _OFF_VALUES
 # at the 1s default a call shorter than that is sampled once, at its very start
 DEFAULT_POLL_S    = 0.01
 DEFAULT_REFRESH_S = 1.
+
+
+# Per-call samples are what median and p95 are computed from. A python float in a
+# list costs ~32 bytes, so an uncapped list would be 320 MB after 10 M calls --
+# per function, and twice that with memory. Count, sum and max stay exact beyond
+# the cap; only the distribution is sampled.
+DEFAULT_MAX_SAMPLES = 100_000
+
+
+# Which per-call time statistic the summary shows before the total. "max" by
+# default: it is the only one the other columns cannot reconstruct, since the
+# mean is global / Nb call and both are already on the line.
+SUMMARY_TIME_STATS   = ("mean", "max", "median", "p95")
+DEFAULT_SUMMARY_TIME = ("max",)
+
+
+def _fixed_width_time(seconds):
+    """htd() returns the int 0 for a zero duration, which breaks the columns."""
+    return htd(seconds) if seconds else f"{0:11.2f}s "
+
+
+def _percentile(values, fraction):
+    """Nearest rank: deterministic, and defined for a single sample."""
+    if not values :
+        return 0.
+    ordered = sorted(values)
+    rank = math.ceil(fraction * len(ordered))
+    return ordered[max(0, min(len(ordered) - 1, rank - 1))]
 
 
 class Interactivity(str, Enum):
@@ -112,6 +142,8 @@ class profiler_collecteur(object):
             self.loggername = " ⚡"
             self.lvl = 'INFO'
             self.refresh_interval = DEFAULT_REFRESH_S
+            self.max_samples = DEFAULT_MAX_SAMPLES
+            self.summary_time = DEFAULT_SUMMARY_TIME
             # nesting depth and re-entrancy are per thread: two threads calling
             # the same profiled function are not nested inside one another
             self._local = threading.local()
@@ -168,17 +200,25 @@ class profiler_collecteur(object):
         already counted by the outermost frame, and adding it would count the same
         seconds several times over."""
         with self._lock :
-            if fname in self.profData.keys():
-                self.profData[fname]["nbCall"] += 1
-                if outermost :
-                    self.profData[fname]["dt"] += deltaTime
-                    self.profData[fname]["dm_list"].append(deltaMem)
-                    self.profData[fname]["deep"].append(self.deep[0])
-            else :
-                self.profData[fname] = {"dt": deltaTime if outermost else 0.,
-                                        "dm_list": [deltaMem] if outermost else [],
-                                        "nbCall": 1,
-                                        "deep": [self.deep[0]] if outermost else []}
+            entry = self.profData.get(fname)
+            if entry is None :
+                entry = self.profData[fname] = {"dt": 0., "dt_max": None, "dt_list": [],
+                                                "dm_max": None, "dm_list": [],
+                                                "nbCall": 0, "deep": set()}
+            entry["nbCall"] += 1
+
+            if outermost :
+                entry["dt"] += deltaTime
+                entry["deep"].add(self.deep[0])
+                if entry["dt_max"] is None or deltaTime > entry["dt_max"] :
+                    entry["dt_max"] = deltaTime
+                if entry["dm_max"] is None or deltaMem > entry["dm_max"] :
+                    entry["dm_max"] = deltaMem
+                # count, sum and max above are exact; the lists only feed the
+                # percentiles, so they are the part that gets capped
+                if len(entry["dt_list"]) < self.max_samples :
+                    entry["dt_list"].append(deltaTime)
+                    entry["dm_list"].append(deltaMem)
 
             active = self._active
             if fname in active :
@@ -239,7 +279,7 @@ class profiler_collecteur(object):
         if fname in self.profThread.keys():
             mmax = 0.
             if fname in self.profData.keys(): 
-                mmax = max(self.profData[fname]["dm_list"] or [0])
+                mmax = self.profData[fname]["dm_max"] or 0
             if mmax < self.profThread[fname] :
                 mmax = self.profThread[fname]
             delta_mem_str += " / peak " +  f"{bytes2human(mmax):>7}"
@@ -255,9 +295,18 @@ class profiler_collecteur(object):
         self.deep[1] = self.deep[0]
         self._print(toprint, end)
 
+    def _time_stat(self, val, name):
+        if name == "mean" :
+            return val["dt"] / val["nbCall"]
+        if name == "max" :
+            return val["dt_max"] or 0.
+        if name == "median" :
+            return statistics.median(val["dt_list"]) if val["dt_list"] else 0.
+        return _percentile(val["dt_list"], 0.95)
+
     def __strMaxMemory(self, key, rbytes=False):
         val = self.profData[key]
-        mmax = max(val["dm_list"] or [0])
+        mmax = val["dm_max"] or 0
         if key in self.profThread.keys():
             if mmax < self.profThread[key] :
                 mmax = self.profThread[key]
@@ -273,19 +322,23 @@ class profiler_collecteur(object):
             str += f" customProfiler log : global timer {ggi['global_run_time']} / memory peak {ggi['memory_peak']:^10}"
             # str += f"\n ⚡ {'':^45} | {'':7} | {'time':^29} | {'mem. consumption':^17}"
             str += "\n " + "⚡" * 8
-            str += (f"\n ⚡ {'fct name':^45} | {'Nb call':7} | " +
-                    f"{'  time : mean / global':<29} | {'mem. max :  Δ / Th':^17}")
-            str += "\n ⚡ "+ "="*108
-            for key, val in self.profData.items():
-                t_str = htd(val["dt"])
-                t_p_call_str = htd(val["dt"]/val['nbCall'])
+            stats = self.summary_time
+            time_header = "  time : " + " / ".join(stats) + " / global"
+            time_width = 13 * (len(stats) + 1) + 3 * len(stats)
 
-                dp = list(sorted(set(val["deep"])))
+            str += (f"\n ⚡ {'fct name':^45} | {'Nb call':7} | " +
+                    f"{time_header:<{time_width}} | {'mem. max :  Δ / Th':^17}")
+            str += "\n ⚡ "+ "="*(108 + time_width - 29)
+            for key, val in self.profData.items():
+                t_str = _fixed_width_time(val["dt"])
+                cells = [_fixed_width_time(self._time_stat(val, name)) for name in stats]
+
+                dp = sorted(val["deep"])
                 dp_str = ''.join(["+" if i in dp else "-" for i in range(4)])
 
                 str += f"\n ⚡ {dp_str} {key: ^40.40} | {val['nbCall']:^7} "
-                str += f"| {t_p_call_str} / {t_str} "
-                strmen = bytes2human(max(val["dm_list"] or [0]))
+                str += "| " + " / ".join(cells + [t_str]) + " "
+                strmen = bytes2human(val["dm_max"] or 0)
                 strmaxmem = self.__strMaxMemory(key)
                 str += f"| {strmen:>7}  / {strmaxmem:>7}"
             str += "\n " + "⚡" * 8
@@ -318,8 +371,13 @@ class profiler_collecteur(object):
                           "global_time_s": val["dt"],
                           "mean_time": htd(val["dt"]/val['nbCall']),
                           "mean_time_s": val["dt"]/val['nbCall'],
-                          "max_memory": bytes2human(max(val['dm_list'] or [0])),
-                          "max_memory_b": max(val['dm_list'] or [0]),
+                          "max_time": htd(val["dt_max"] or 0.),
+                          "max_time_s": val["dt_max"] or 0.,
+                          "median_time_s": statistics.median(val["dt_list"]) if val["dt_list"] else 0.,
+                          "p95_time_s": _percentile(val["dt_list"], 0.95),
+                          "per_call_time_s": list(val["dt_list"]),
+                          "max_memory": bytes2human(val['dm_max'] or 0),
+                          "max_memory_b": val['dm_max'] or 0,
                           "per_call_memory_b": list(val['dm_list']),
                           "peak_memory": self.__strMaxMemory(key),
                           "peak_memory_b": self.__strMaxMemory(key, rbytes=True)})
@@ -333,6 +391,8 @@ class profiler_collecteur(object):
                 , force_print_in_console = _UNSET
                 , no_summary_in_log = _UNSET
                 , refresh_interval = _UNSET
+                , max_samples = _UNSET
+                , summary_time = _UNSET
                 , **legacy):
         """Change the options you pass, and leave the others alone."""
 
@@ -343,7 +403,9 @@ class profiler_collecteur(object):
                  "profiler_level": profiler_level,
                  "force_print_in_console": force_print_in_console,
                  "no_summary_in_log": no_summary_in_log,
-                 "refresh_interval": refresh_interval}
+                 "refresh_interval": refresh_interval,
+                 "max_samples": max_samples,
+                 "summary_time": summary_time}
 
         for old_name, new_name in _LEGACY_OPTIONS.items():
             if old_name in legacy :
@@ -374,6 +436,19 @@ class profiler_collecteur(object):
             assert isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0, \
                 f'refresh_interval {value} must be a number of seconds > 0'
             self.refresh_interval = float(value)
+        if given["max_samples"] is not _UNSET :
+            value = given["max_samples"]
+            assert isinstance(value, int) and not isinstance(value, bool) and value > 0, \
+                f'max_samples {value} must be an int > 0'
+            self.max_samples = value
+        if given["summary_time"] is not _UNSET :
+            value = given["summary_time"]
+            if isinstance(value, str) :
+                value = (value,)
+            value = tuple(value)
+            assert value and all(name in SUMMARY_TIME_STATS for name in value), \
+                f'summary_time {value} must be one or more of {SUMMARY_TIME_STATS}'
+            self.summary_time = value
 
         if given["use_logger"] is not _UNSET :
             if given["use_logger"] :

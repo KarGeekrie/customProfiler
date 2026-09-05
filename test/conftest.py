@@ -21,7 +21,8 @@ from pathlib import Path
 import pytest
 
 from custom_profiler import profiler_collecteur
-from custom_profiler.collecteur import Interactivity
+from custom_profiler.collecteur import (Interactivity, DEFAULT_REFRESH_S,
+                                        DEFAULT_MAX_SAMPLES, DEFAULT_SUMMARY_TIME)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,6 +39,10 @@ def reset_collecteur():
         profiler_collecteur.forcePrintInCsl = False
         profiler_collecteur.noSummaryInLog = False
         profiler_collecteur._local.active = {}
+        # options() sets these on the instance, shadowing the class default
+        profiler_collecteur.refresh_interval = DEFAULT_REFRESH_S
+        profiler_collecteur.max_samples = DEFAULT_MAX_SAMPLES
+        profiler_collecteur.summary_time = DEFAULT_SUMMARY_TIME
         # never AUTO: the tests must not depend on pytest's capture mode
         profiler_collecteur.interractivity = Interactivity.MF_NO_INTERAC
 

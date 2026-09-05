@@ -93,6 +93,12 @@ stays as it is.
   `False` for a re-entrant call; `save(..., outermost=False)` then bumps `nbCall`
   and nothing else — no time, no memory, no printed line. Without that, `fib(4)`
   counted the same seconds four times over.
+* **Count, total and maximum are exact; the per-call lists are capped.**
+  `save()` keeps running `dt`, `dt_max` and `dm_max`, and appends to `dt_list` /
+  `dm_list` only while they are under `max_samples` (100k). A python float in a list
+  costs ~32 bytes, so uncapped lists reach 320 MB per function after 10 M calls.
+  Anything you add that grows per call needs the same treatment — that is why
+  `deep` became a set.
 * **`save(keep_deep=True)`** records an entry that is *not* a nesting level. The
   line-by-line tracer uses it: a traced line must not move the counter the
   enclosing function pushed.
@@ -152,8 +158,10 @@ stays as it is.
 
 The README shows exact console output. Column widths, the ⚡ prefixes, the
 `"="*108` rule, the `{fname: <45.45}` field, the `+---` / `-+--` depth markers built
-from `profData[key]["deep"]`, and the nesting glyphs `┌─` / `├─` driven by
-`deep = [current, previous]` are all reproduced there.
+from `profData[key]["deep"]` (a **set** of depths, not one entry per call), and the
+nesting glyphs `┌─` / `├─` driven by `deep = [current, previous]` are all reproduced
+there. The 108 is now the *default* width: `summary_time` can add time columns, and
+the rule widens by 16 per extra one.
 
 If you change any of that, **regenerate and update the corresponding README blocks in
 the same commit** by running the matching script in `test/demo/`. Depth bookkeeping
