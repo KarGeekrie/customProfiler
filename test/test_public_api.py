@@ -180,6 +180,30 @@ def test_env_var_strips_the_decorator(run_py):
     assert "COLLECTED 0" in out
 
 
+def test_the_env_var_also_silences_the_exit_summary(run_py):
+    """"costs nothing in production" has to mean nothing on stdout either: the
+    summary used to print anyway, corrupting the output of any program that
+    merely imports the package."""
+    out = run_py(
+        """
+        import custom_profiler
+        print("--- end of program ---")
+        """,
+        env={"CUSTOM_PROFILER": "0"},
+    )
+    assert out.strip() == "--- end of program ---"
+
+
+def test_without_the_env_var_the_summary_is_printed(run_py):
+    out = run_py(
+        """
+        import custom_profiler
+        print("--- end of program ---")
+        """
+    )
+    assert "customProfiler log" in out.split("--- end of program ---")[1]
+
+
 def test_env_var_absent_keeps_profiling(run_py):
     out = run_py(
         """

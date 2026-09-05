@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 
@@ -13,17 +12,12 @@ process = psutil.Process()
 
 from custom_profiler import line_by_line
 from custom_profiler.line_by_line import trace_calls
-from custom_profiler.collecteur import profiler_collecteur, Interactivity, bytes2human
+from custom_profiler.collecteur import (profiler_collecteur, Interactivity,
+                                        bytes2human, DISABLED)
 from custom_profiler.human_readable_time import human_time_duration as htd
 
 
 profC = profiler_collecteur()
-
-
-# CUSTOM_PROFILER=0 removes the decorators entirely, so a library can ship
-# profiled code that costs nothing in production
-_OFF_VALUES = ("0", "false", "no", "off")
-DISABLED = os.environ.get("CUSTOM_PROFILER", "").strip().lower() in _OFF_VALUES
 
 
 POLL_S    = 0.01  # how often the watcher wakes up
