@@ -13,6 +13,10 @@
   twice that with memory: the profiler would become the memory problem it is meant
   to diagnose. Count, total and maximum stay exact beyond the cap; only the
   distribution behind `median_time_s` and `p95_time_s` is sampled.
+* `options(name_width=…)` sets the width of the name column, shared by the per-call
+  lines and the summary so they stay aligned. `None` never truncates: the summary
+  sizes itself to its longest name. Default 45, as before — a dotted module path
+  used to lose its tail, which is the part that tells two entries apart.
 * `options(summary_time=…)` picks the time statistic the summary shows —
   `"mean"`, `"max"`, `"median"`, `"p95"`, or a tuple of them, which widens the
   column and the rule to match.

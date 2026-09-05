@@ -22,7 +22,8 @@ import pytest
 
 from custom_profiler import profiler_collecteur
 from custom_profiler.collecteur import (Interactivity, DEFAULT_REFRESH_S,
-                                        DEFAULT_MAX_SAMPLES, DEFAULT_SUMMARY_TIME)
+                                        DEFAULT_MAX_SAMPLES, DEFAULT_SUMMARY_TIME,
+                                        DEFAULT_NAME_WIDTH)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,6 +44,7 @@ def reset_collecteur():
         profiler_collecteur.refresh_interval = DEFAULT_REFRESH_S
         profiler_collecteur.max_samples = DEFAULT_MAX_SAMPLES
         profiler_collecteur.summary_time = DEFAULT_SUMMARY_TIME
+        profiler_collecteur.name_width = DEFAULT_NAME_WIDTH
         # never AUTO: the tests must not depend on pytest's capture mode
         profiler_collecteur.interractivity = Interactivity.MF_NO_INTERAC
 

@@ -51,6 +51,12 @@ SUMMARY_TIME_STATS   = ("mean", "max", "median", "p95")
 DEFAULT_SUMMARY_TIME = ("max",)
 
 
+# Width of the name column, shared by the live line and the summary so the two
+# stay aligned. The summary spends 5 of it on the depth marker. None means never
+# truncate: the summary then sizes itself to its longest name.
+DEFAULT_NAME_WIDTH = 45
+
+
 def _fixed_width_time(seconds):
     """htd() returns the int 0 for a zero duration, which breaks the columns."""
     return htd(seconds) if seconds else f"{0:11.2f}s "
@@ -144,6 +150,7 @@ class profiler_collecteur(object):
             self.refresh_interval = DEFAULT_REFRESH_S
             self.max_samples = DEFAULT_MAX_SAMPLES
             self.summary_time = DEFAULT_SUMMARY_TIME
+            self.name_width = DEFAULT_NAME_WIDTH
             # nesting depth and re-entrancy are per thread: two threads calling
             # the same profiled function are not nested inside one another
             self._local = threading.local()
@@ -291,9 +298,15 @@ class profiler_collecteur(object):
             else :
                 fname = "  " * self.deep[0] + "├─" + fname
         colorEnd = "" if color == "" else "\033[0m"
-        toprint = f"{color} {fname: <45.45} | takes : {delta_time} | consumes : {delta_mem_str} {colorEnd}"
+        name_cell = self._name_cell(fname, self.name_width)
+        toprint = f"{color} {name_cell} | takes : {delta_time} | consumes : {delta_mem_str} {colorEnd}"
         self.deep[1] = self.deep[0]
         self._print(toprint, end)
+
+    def _name_cell(self, name, width, align="<"):
+        if width is None :
+            return f"{name:{align}{DEFAULT_NAME_WIDTH}}"   # pad, never cut
+        return f"{name:{align}{width}.{width}}"
 
     def _time_stat(self, val, name):
         if name == "mean" :
@@ -326,9 +339,14 @@ class profiler_collecteur(object):
             time_header = "  time : " + " / ".join(stats) + " / global"
             time_width = 13 * (len(stats) + 1) + 3 * len(stats)
 
-            str += (f"\n ⚡ {'fct name':^45} | {'Nb call':7} | " +
+            name_width = self.name_width
+            if name_width is None :   # size the table to its longest name
+                name_width = max([DEFAULT_NAME_WIDTH] + [len(k) + 5 for k in self.profData])
+            key_width = name_width - 5
+
+            str += (f"\n ⚡ {'fct name':^{name_width}} | {'Nb call':7} | " +
                     f"{time_header:<{time_width}} | {'mem. max :  Δ / Th':^17}")
-            str += "\n ⚡ "+ "="*(108 + time_width - 29)
+            str += "\n ⚡ "+ "="*(108 + time_width - 29 + name_width - DEFAULT_NAME_WIDTH)
             for key, val in self.profData.items():
                 t_str = _fixed_width_time(val["dt"])
                 cells = [_fixed_width_time(self._time_stat(val, name)) for name in stats]
@@ -336,7 +354,7 @@ class profiler_collecteur(object):
                 dp = sorted(val["deep"])
                 dp_str = ''.join(["+" if i in dp else "-" for i in range(4)])
 
-                str += f"\n ⚡ {dp_str} {key: ^40.40} | {val['nbCall']:^7} "
+                str += f"\n ⚡ {dp_str} {self._name_cell(key, key_width, '^')} | {val['nbCall']:^7} "
                 str += "| " + " / ".join(cells + [t_str]) + " "
                 strmen = bytes2human(val["dm_max"] or 0)
                 strmaxmem = self.__strMaxMemory(key)
@@ -393,6 +411,7 @@ class profiler_collecteur(object):
                 , refresh_interval = _UNSET
                 , max_samples = _UNSET
                 , summary_time = _UNSET
+                , name_width = _UNSET
                 , **legacy):
         """Change the options you pass, and leave the others alone."""
 
@@ -405,7 +424,8 @@ class profiler_collecteur(object):
                  "no_summary_in_log": no_summary_in_log,
                  "refresh_interval": refresh_interval,
                  "max_samples": max_samples,
-                 "summary_time": summary_time}
+                 "summary_time": summary_time,
+                 "name_width": name_width}
 
         for old_name, new_name in _LEGACY_OPTIONS.items():
             if old_name in legacy :
@@ -449,6 +469,11 @@ class profiler_collecteur(object):
             assert value and all(name in SUMMARY_TIME_STATS for name in value), \
                 f'summary_time {value} must be one or more of {SUMMARY_TIME_STATS}'
             self.summary_time = value
+        if given["name_width"] is not _UNSET :
+            value = given["name_width"]
+            assert value is None or (isinstance(value, int) and not isinstance(value, bool) and value > 5), \
+                f'name_width {value} must be an int > 5, or None for no truncation'
+            self.name_width = value
 
         if given["use_logger"] is not _UNSET :
             if given["use_logger"] :

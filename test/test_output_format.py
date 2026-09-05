@@ -208,3 +208,78 @@ def test_the_default_stays_a_108_character_rule(pc):
 def test_summary_time_rejects_unknown_statistics(pc, bad):
     with pytest.raises((AssertionError, TypeError), match="summary_time|iterable|argument"):
         pc.options(summary_time=bad)
+
+
+# --- long names --------------------------------------------------------------
+
+LONG_NAME = "services.billing.invoice.recompute_monthly_totals_for_account"
+
+
+def test_the_default_still_truncates_at_45(pc, capsys):
+    pc.print_line(LONG_NAME, "  t", "m")
+    line = capsys.readouterr().out
+    assert LONG_NAME[:45] in line
+    assert LONG_NAME[:46] not in line
+
+
+def test_a_wider_column_shows_more_of_the_name(pc, capsys):
+    pc.options(name_width=70)
+    pc.print_line(LONG_NAME, "  t", "m")
+    line = capsys.readouterr().out
+
+    assert LONG_NAME in line                       # 61 chars, fits in 70
+    name_field = line.split(" |")[0][len(" ⚡ "):]
+    assert len(name_field) == 70
+
+
+def test_no_limit_never_truncates(pc, capsys):
+    pc.options(name_width=None)
+    pc.print_line(LONG_NAME, "  t", "m")
+    assert LONG_NAME in capsys.readouterr().out
+
+
+def test_no_limit_pads_short_names_to_the_default(pc, capsys):
+    pc.options(name_width=None)
+    pc.print_line("f", "  t", "m")
+    name_field = capsys.readouterr().out.split(" |")[0][len(" ⚡ "):]
+    assert len(name_field) == 45
+
+
+def test_the_summary_sizes_itself_to_the_longest_name(pc):
+    pc.incr()
+    pc.save(LONG_NAME, 1.0, 0)
+    pc.incr()
+    pc.save("f", 1.0, 0)
+    pc.options(name_width=None)
+
+    lines = [l for l in str(pc).splitlines() if "fct name" in l or "+---" in l or "===" in l]
+    assert LONG_NAME in "\n".join(lines)
+    assert len(set(len(l) for l in lines)) == 1        # header, rule and rows line up
+
+
+def test_a_wider_column_widens_the_rule_by_the_same_amount(pc):
+    pc.incr()
+    pc.save("f", 1.0, 0)
+
+    def rule():
+        return next(l for l in str(pc).splitlines() if "===" in l).count("=")
+
+    default = rule()
+    pc.options(name_width=60)
+    assert rule() == default + 15
+
+
+def test_the_live_line_and_the_summary_share_the_width(pc, capsys):
+    pc.options(name_width=60)
+    pc.incr()
+    pc.save("f", 1.0, 0)
+    live = capsys.readouterr().out.splitlines()[0]
+    header = next(l for l in str(pc).splitlines() if "fct name" in l)
+
+    assert live.index(" | takes") == header.index(" | Nb call")
+
+
+@pytest.mark.parametrize("bad", [0, 5, -10, 12.5, "wide", True])
+def test_name_width_rejects_unusable_values(pc, bad):
+    with pytest.raises(AssertionError, match="name_width"):
+        pc.options(name_width=bad)

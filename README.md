@@ -132,7 +132,14 @@ the end of the run.
  ⚡ my_func                                       | takes :        4.14s  | consumes :  Δ    7.8M / peak  160.2M
 ```
 
-* the **name** — the function's, or the label given to `magic_profiler` / `name=`
+* the **name** — the function's, or the label given to `magic_profiler` / `name=`.
+  Truncated at 45 characters; widen it with `options(name_width=70)`, or pass
+  `None` to never truncate:
+
+  ```
+  name_width = 45     ⚡ services.billing.invoice.recompute_monthly_to | takes : …
+  name_width = None   ⚡ services.billing.invoice.recompute_monthly_totals_for_account | takes : …
+  ```
 * **takes** — wall time of that call
 * **Δ** — process RSS when the call returned, minus RSS when it started. Exact, but
   it is the whole process, not your function: see [Limitations](#limitations)
@@ -382,6 +389,10 @@ The other options allow you to activate a logger :
 * *max_samples* : how many per-call samples to keep per entry, feeding
   `median_time_s` and `p95_time_s`. The call count, total and maximum stay exact
   beyond it. Default: *100000*
+* *name_width* : width of the name column, shared by the per-call lines and the
+  summary so the two stay aligned. `None` never truncates — the summary then sizes
+  itself to its longest name, and short names are still padded so the columns hold.
+  Default: *45*
 
 `options()` only changes what you pass it: a partial call leaves every other option
 alone.
