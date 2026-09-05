@@ -27,7 +27,9 @@ def test_save_aggregates_repeated_calls(pc):
     assert entry["nbCall"] == 3
     assert entry["dt"] == pytest.approx(1.5)
     assert entry["dm_list"] == [100, 100, 100]
-    assert entry["deep"] == [0, 0, 0]
+    assert entry["dt_list"] == [0.5, 0.5, 0.5]
+    assert entry["dt_max"] == pytest.approx(0.5)
+    assert entry["deep"] == {0}          # the set of depths, not one per call
 
 
 def test_save_restores_the_depth_counter(pc):
@@ -43,6 +45,8 @@ def test_getitem_exposes_exactly_the_documented_keys(pc):
         "nb_call",
         "global_time", "global_time_s",
         "mean_time", "mean_time_s",
+        "max_time", "max_time_s",
+        "median_time_s", "p95_time_s", "per_call_time_s",
         "max_memory", "max_memory_b", "per_call_memory_b",
         "peak_memory", "peak_memory_b",
     }
@@ -153,3 +157,98 @@ def test_keep_deep_leaves_the_counter_alone(pc):
     assert pc.deep[0] == before
     pc.save("fct", 0.1, 0)
     assert pc.deep[0] == before - 1
+
+
+# --- per-call times ----------------------------------------------------------
+
+def test_per_call_times_are_kept(pc):
+    for dt in (0.1, 0.3, 0.2):
+        pc.incr()
+        pc.save("f", dt, 0)
+
+    data = pc["f"]
+    assert data["per_call_time_s"] == [0.1, 0.3, 0.2]
+    assert data["max_time_s"] == pytest.approx(0.3)
+    assert data["max_time"].strip() == "300.00ms"
+    assert data["global_time_s"] == pytest.approx(0.6)
+    assert data["mean_time_s"] == pytest.approx(0.2)
+
+
+def test_median_and_p95_see_the_tail_the_mean_hides(pc):
+    """The point of the whole thing: 99 fast calls and one slow one."""
+    for _ in range(99):
+        pc.incr()
+        pc.save("f", 0.01, 0)
+    pc.incr()
+    pc.save("f", 5.0, 0)
+
+    data = pc["f"]
+    assert data["mean_time_s"] == pytest.approx(0.0599, abs=1e-3)   # says "fast"
+    assert data["median_time_s"] == pytest.approx(0.01)             # typical call
+    assert data["max_time_s"] == pytest.approx(5.0)                 # the tail
+    assert data["p95_time_s"] == pytest.approx(0.01)                # 1 in 100 is not p95
+
+
+def test_p95_tracks_a_fatter_tail(pc):
+    for _ in range(90):
+        pc.incr()
+        pc.save("f", 0.01, 0)
+    for _ in range(10):
+        pc.incr()
+        pc.save("f", 2.0, 0)
+
+    assert pc["f"]["p95_time_s"] == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize("n", [1, 2, 3])
+def test_statistics_are_defined_for_tiny_samples(pc, n):
+    for _ in range(n):
+        pc.incr()
+        pc.save("f", 0.2, 0)
+
+    data = pc["f"]
+    assert data["median_time_s"] == pytest.approx(0.2)
+    assert data["p95_time_s"] == pytest.approx(0.2)
+    assert data["max_time_s"] == pytest.approx(0.2)
+
+
+def test_an_unprofiled_entry_has_zeroed_statistics(pc):
+    """A recursive inner frame records nothing but the call count."""
+    pc.incr("f")
+    pc.incr("f")
+    pc.save("f", 1.0, 100, outermost=False)
+
+    data = pc["f"]
+    assert data["nb_call"] == 1
+    assert data["max_time_s"] == 0.
+    assert data["median_time_s"] == 0.
+    assert data["p95_time_s"] == 0.
+    assert data["per_call_time_s"] == []
+
+
+# --- the sample cap ----------------------------------------------------------
+
+def test_samples_are_capped_but_count_sum_and_max_stay_exact(pc):
+    pc.options(max_samples=10)
+    for i in range(50):
+        pc.incr()
+        pc.save("f", 0.01 * (i + 1), i)
+
+    entry = pc.profData["f"]
+    assert len(entry["dt_list"]) == 10        # the distribution is sampled ...
+    assert len(entry["dm_list"]) == 10
+    data = pc["f"]
+    assert data["nb_call"] == 50              # ... the rest is not
+    assert data["global_time_s"] == pytest.approx(0.01 * sum(range(1, 51)))
+    assert data["max_time_s"] == pytest.approx(0.5)     # the 50th call, past the cap
+    assert data["max_memory_b"] == 49
+
+
+def test_max_samples_defaults_to_100k(pc):
+    assert pc.max_samples == 100_000
+
+
+@pytest.mark.parametrize("bad", [0, -1, 1.5, "lots", None, True])
+def test_max_samples_must_be_a_positive_int(pc, bad):
+    with pytest.raises(AssertionError, match="max_samples"):
+        pc.options(max_samples=bad)

@@ -80,7 +80,7 @@ def test_summary_header_columns(pc):
     pc.save("f", 1.0, 0)
     header = next(l for l in str(pc).splitlines() if "fct name" in l)
     assert "Nb call" in header
-    assert "time : mean / global" in header
+    assert "time : max / global" in header      # max by default, not mean
     assert "mem. max :  Δ / Th" in header
 
 
@@ -133,3 +133,153 @@ def test_output_survives_a_console_that_cannot_print_the_bolt(run_py):
     assert "my_func" in out
     assert "?" in out                        # with the bolt replaced
     assert "Traceback" not in out
+
+
+# --- the time column ---------------------------------------------------------
+
+def _summary_row(pc, name):
+    return next(l for l in str(pc).splitlines() if name in l and "+" in l)
+
+
+def test_the_summary_shows_the_worst_call_not_the_mean(pc):
+    """208 calls at 12ms and 8 at 740ms: the mean says 40ms and hides the tail."""
+    for _ in range(200):
+        pc.incr()
+        pc.save("f", 0.012, 0)
+    for _ in range(8):
+        pc.incr()
+        pc.save("f", 0.740, 0)
+
+    time_field = _summary_row(pc, "f").split("|")[2]
+    shown, total = [c.strip() for c in time_field.split("/")]
+    assert shown == "740.00ms"          # the worst call
+    assert total == "8.32s"             # not the mean, which is 40.00ms
+
+    pc.options(summary_time="mean")
+    time_field = _summary_row(pc, "f").split("|")[2]
+    assert time_field.split("/")[0].strip() == "40.00ms"
+
+
+def test_the_time_column_is_selectable(pc):
+    for _ in range(10):
+        pc.incr()
+        pc.save("f", 0.1, 0)
+    pc.incr()
+    pc.save("f", 0.5, 0)
+
+    pc.options(summary_time="mean")
+    assert "time : mean / global" in str(pc)
+
+    pc.options(summary_time=("median", "p95"))
+    header = next(l for l in str(pc).splitlines() if "fct name" in l)
+    assert "time : median / p95 / global" in header
+
+
+def test_extra_columns_widen_the_rule_to_match(pc):
+    pc.incr()
+    pc.save("f", 0.1, 0)
+
+    def widths():
+        lines = str(pc).splitlines()
+        header = next(l for l in lines if "fct name" in l)
+        rule = next(l for l in lines if "===" in l)
+        row = _summary_row(pc, "f")
+        return len(header), len(rule), len(row)
+
+    pc.options(summary_time=("max",))
+    one = widths()
+    assert one[0] == one[2]                      # header and row line up
+
+    pc.options(summary_time=("mean", "max"))
+    two = widths()
+    assert two[2] == one[2] + 16                 # one more 13-char field plus " / "
+    assert two[1] == one[1] + 16                 # and the rule follows
+    assert two[0] == two[2]
+
+
+def test_the_default_stays_a_108_character_rule(pc):
+    pc.incr()
+    pc.save("f", 0.1, 0)
+    rule = next(l for l in str(pc).splitlines() if "===" in l)
+    assert rule.count("=") == 108
+
+
+@pytest.mark.parametrize("bad", [(), "p50", ("max", "p50"), 42])
+def test_summary_time_rejects_unknown_statistics(pc, bad):
+    with pytest.raises((AssertionError, TypeError), match="summary_time|iterable|argument"):
+        pc.options(summary_time=bad)
+
+
+# --- long names --------------------------------------------------------------
+
+LONG_NAME = "services.billing.invoice.recompute_monthly_totals_for_account"
+
+
+def test_the_default_still_truncates_at_45(pc, capsys):
+    pc.print_line(LONG_NAME, "  t", "m")
+    line = capsys.readouterr().out
+    assert LONG_NAME[:45] in line
+    assert LONG_NAME[:46] not in line
+
+
+def test_a_wider_column_shows_more_of_the_name(pc, capsys):
+    pc.options(name_width=70)
+    pc.print_line(LONG_NAME, "  t", "m")
+    line = capsys.readouterr().out
+
+    assert LONG_NAME in line                       # 61 chars, fits in 70
+    name_field = line.split(" |")[0][len(" ⚡ "):]
+    assert len(name_field) == 70
+
+
+def test_no_limit_never_truncates(pc, capsys):
+    pc.options(name_width=None)
+    pc.print_line(LONG_NAME, "  t", "m")
+    assert LONG_NAME in capsys.readouterr().out
+
+
+def test_no_limit_pads_short_names_to_the_default(pc, capsys):
+    pc.options(name_width=None)
+    pc.print_line("f", "  t", "m")
+    name_field = capsys.readouterr().out.split(" |")[0][len(" ⚡ "):]
+    assert len(name_field) == 45
+
+
+def test_the_summary_sizes_itself_to_the_longest_name(pc):
+    pc.incr()
+    pc.save(LONG_NAME, 1.0, 0)
+    pc.incr()
+    pc.save("f", 1.0, 0)
+    pc.options(name_width=None)
+
+    lines = [l for l in str(pc).splitlines() if "fct name" in l or "+---" in l or "===" in l]
+    assert LONG_NAME in "\n".join(lines)
+    assert len(set(len(l) for l in lines)) == 1        # header, rule and rows line up
+
+
+def test_a_wider_column_widens_the_rule_by_the_same_amount(pc):
+    pc.incr()
+    pc.save("f", 1.0, 0)
+
+    def rule():
+        return next(l for l in str(pc).splitlines() if "===" in l).count("=")
+
+    default = rule()
+    pc.options(name_width=60)
+    assert rule() == default + 15
+
+
+def test_the_live_line_and_the_summary_share_the_width(pc, capsys):
+    pc.options(name_width=60)
+    pc.incr()
+    pc.save("f", 1.0, 0)
+    live = capsys.readouterr().out.splitlines()[0]
+    header = next(l for l in str(pc).splitlines() if "fct name" in l)
+
+    assert live.index(" | takes") == header.index(" | Nb call")
+
+
+@pytest.mark.parametrize("bad", [0, 5, -10, 12.5, "wide", True])
+def test_name_width_rejects_unusable_values(pc, bad):
+    with pytest.raises(AssertionError, match="name_width"):
+        pc.options(name_width=bad)
