@@ -23,6 +23,9 @@
 
 ### Changed
 
+* `utils/up_version.sh` is gone, replaced by `utils/RELEASE.md`. Since the version
+  comes from the tag, the script had nothing left to do that `git tag` and
+  `twine upload` do not.
 * **The summary's time column now shows `max / global`, not `mean / global`.** The
   mean is `global / Nb call` and both are on the line; the worst call is not
   reconstructible from anything else. On a real run of 208 calls, 8 of them slow,
@@ -114,8 +117,7 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
   `----`, now that the counter stays balanced.
 * Minimum Python is 3.9 (0.3 claimed 3.6, which was never tested).
 * The version is derived from the git tag by setuptools-scm (`dynamic = ["version"]`),
-  so there is no number to bump in a file. `utils/up_version.sh` takes it as an
-  argument now.
+  so there is no number to bump in a file.
 
 ### Deprecated
 
