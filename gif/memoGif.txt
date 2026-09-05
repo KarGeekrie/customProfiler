@@ -1,14 +1,32 @@
-https://github.com/faressoft/terminalizer
-+ https://nodejs.org/en/download/package-manager -> v16
+Regenerating gif/demoProf.gif
+=============================
 
-install terminalizer centos7:
->> curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
->> nvm install 16
->> node -v # should print `v16.20.2`
->> npm -v # should print `8.19.4`
->> npm install -g terminalizer
+asciinema records, agg encodes. No node, no rust toolchain needed.
 
+  pipx install asciinema
+  # agg: take the prebuilt binary, "cargo install" needs a rust toolchain
+  gh release download v1.9.0 --repo asciinema/agg \
+     --pattern "agg-x86_64-unknown-linux-musl" --output ~/.local/bin/agg
+  chmod +x ~/.local/bin/agg
 
-use :
->> terminalizer record demo
->> terminalizer render demo
+  asciinema rec demo.cast --cols 120 --rows 12 --overwrite \
+     -c ".venv/bin/python test/demo/prof_function.py"
+  agg --font-size 20 --theme asciinema demo.cast gif/demoProf.gif
+
+Two things to get right:
+
+* --cols 120. The summary table is 112 characters wide, and a narrower
+  terminal wraps it: the gif then shows a broken table. Check with
+  `head -1 demo.cast` that width is above the longest line.
+* --rows 12 fits the three call lines plus the summary with no dead space
+  underneath. More rows means a taller gif that is mostly background.
+
+The recording must run in a tty, which asciinema provides: that is what makes
+AUTO resolve to ENABLE, and the interactive yellow line is the whole point of
+the demo. Regenerate whenever the printed format changes -- the gif shows the
+column headers, so it goes stale silently.
+
+demo.cast is a local artefact, gitignored. The README links the gif by its
+raw.githubusercontent URL, so pushing to main is enough to update it.
+
+Previously made with terminalizer + node 16, see git history.
