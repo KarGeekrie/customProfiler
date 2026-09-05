@@ -1,5 +1,8 @@
+import os
 import sys
 import time
+import inspect
+import warnings
 
 from functools import wraps
 
@@ -74,11 +77,56 @@ def profiler(func=None, linePerline=False, *, name=None):
     def decorate(fct):
         if DISABLED :
             return fct
+        _warn_if_not_measurable(fct)
         return _wrap(fct, name or fct.__name__, linePerline)
 
     if func is None :
         return decorate
     return decorate(func)
+
+
+_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _user_stacklevel():
+    """Point a warning at the caller's line, not ours.
+
+    @profiler and @profiler(name=...) do not go through the same number of
+    frames, so the level has to be found rather than hard-coded.
+    """
+    # warn() counts from its own caller, which is one frame below this helper
+    level = 0
+    frame = inspect.currentframe()
+    while frame is not None :
+        frame = frame.f_back
+        level += 1
+        if frame is None :
+            break
+        if not os.path.abspath(frame.f_code.co_filename).startswith(_PACKAGE_DIR) :
+            return level
+    return 2
+
+
+def _warn_if_not_measurable(func):
+    """A coroutine or generator function returns its object immediately, so the
+    wrapper times the *creation* and reports microseconds for work that took
+    seconds. Say so at decoration: the number it prints looks perfectly plausible.
+    """
+    if inspect.iscoroutinefunction(func) :
+        kind = "a coroutine"
+    elif inspect.isasyncgenfunction(func) :
+        kind = "an async generator"
+    elif inspect.isgeneratorfunction(func) :
+        kind = "a generator"
+    else :
+        return
+
+    warnings.warn(
+        f"{func.__qualname__} is {kind} function: the profiler will time how long "
+        f"it takes to create the object, not to run it, and report microseconds "
+        f"for work that takes seconds. Profile the body with magic_profiler "
+        f"instead, or the synchronous function underneath.",
+        RuntimeWarning, stacklevel=_user_stacklevel())
 
 
 def _wrap(func, fname, linePerline):
@@ -106,10 +154,20 @@ def _wrap(func, fname, linePerline):
             # only the frame that installed the tracer takes it away: a nested or
             # recursive lbl call switching it off under its caller left the
             # tracer state stuck, killing line tracing for the whole process
-            if linePerline and sys.gettrace() is None :
-                line_by_line.set_pending_label(fname)
-                sys.settrace(trace_calls)
-                installed = True
+            if linePerline :
+                current = sys.gettrace()
+                if current is None :
+                    line_by_line.set_pending_label(fname)
+                    sys.settrace(trace_calls)
+                    installed = True
+                elif current is not trace_calls :
+                    # someone else's: a debugger, or coverage. We leave it alone
+                    # rather than break it, but then we report nothing at all
+                    warnings.warn(
+                        f"another tracer is installed (a debugger, or coverage), so "
+                        f"@profiler_lbl reports no lines for {fname}. Its own timing "
+                        f"is still recorded.",
+                        RuntimeWarning, stacklevel=2)
 
             return func(*args, **kwargs)
         finally :

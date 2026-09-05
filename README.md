@@ -470,8 +470,9 @@ Worth knowing before you trust a number:
   async def slow():  await asyncio.sleep(0.3)   # real 0.301s, reported 0.000002s
   ```
 
-  Wrap the `await` in `magic_profiler` instead, or profile the synchronous function
-  underneath. Support is not planned for 1.x: the semantics under concurrency need
+  Decorating one raises a `RuntimeWarning` at the decoration site, so you find out
+  when you write it rather than when you trust the number. Wrap the `await` in
+  `magic_profiler` instead, or profile the synchronous function underneath. Support is not planned for 1.x: the semantics under concurrency need
   deciding first, since wall time across an `await` includes time spent yielded to
   the event loop, so concurrent tasks would each report the full span and the sum
   would exceed the run time.
@@ -486,7 +487,8 @@ Worth knowing before you trust a number:
 * **`@profiler_lbl` uses `sys.settrace`**, so it cannot share a process with a
   debugger or with `coverage`. It leaves theirs alone rather than fighting it, which
   means it reports **nothing at all** in that situation rather than breaking them —
-  if a line-by-line run prints no lines, that is why. It also makes the traced
+  and says so with a `RuntimeWarning`, since a silent empty report is worse than a
+  noisy one. Its own timing is still recorded. It also makes the traced
   function much slower, follows only the decorated function and not the functions it
   calls, and reports no memory peak.
 * **The memory peak is sampled once per second** by the watcher thread. Below about
@@ -502,6 +504,28 @@ Worth knowing before you trust a number:
 
   On a platform whose allocator keeps the freed pages, `Δ` would report them too
   and the gap would be smaller — the sampling rate is the part you control.
+* **Under the GIL, sampling stops entirely during a C call that holds it** — and
+  `refresh_interval` cannot help, because the watcher is not running at all. It is a
+  python thread: it sleeps, releasing the GIL, then has to *take it back* to do
+  anything. A C extension that never releases it starves the watcher until the call
+  returns, so `peak` freezes and so does the interactive line.
+
+  Measured at `refresh_interval = 0.01`, `math.factorial(300000)` against a
+  one-second python loop:
+
+  |  | C call holding the GIL | python loop |
+  |---|---|---|
+  | 3.12, with the GIL | **2** samples of 161 expected | 46 of 100 |
+  | 3.13t, free-threaded | **144** of 158 | 95 of 101 |
+
+  This is not "C code is invisible": plenty of extensions release the GIL — numpy on
+  large arrays, I/O, compression — and a pure python loop releases it regularly. It
+  is the opaque, GIL-holding call that goes unwatched, which is often the one you
+  most wanted to watch.
+
+  On a free-threaded build the watcher runs in parallel and the numbers are real,
+  with nothing to configure. `sys._is_gil_enabled()` tells you which build you are
+  on, from python 3.13.
 
   The cost is one `memory_info()` read per interval, and a faster repaint of the
   interactive line when it is on.
