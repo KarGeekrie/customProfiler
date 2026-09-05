@@ -13,24 +13,29 @@ process = psutil.Process()
 from custom_profiler import line_by_line
 from custom_profiler.line_by_line import trace_calls
 from custom_profiler.collecteur import (profiler_collecteur, Interactivity,
-                                        bytes2human, DISABLED)
+                                        bytes2human, DISABLED,
+                                        DEFAULT_POLL_S, DEFAULT_REFRESH_S)
 from custom_profiler.human_readable_time import human_time_duration as htd
 
 
 profC = profiler_collecteur()
 
 
-POLL_S    = 0.01  # how often the watcher wakes up
-REFRESH_S = 1.    # how often it samples memory and repaints the interactive line
+POLL_S    = DEFAULT_POLL_S     # how often the watcher wakes up
+REFRESH_S = DEFAULT_REFRESH_S  # default for profC.refresh_interval
 
 
 def task(event, fname, start_time, start_mem):
-    next_refresh = time.perf_counter()  # sample at once, then every REFRESH_S
+    # fixed for the duration of this call: options() applies to the next one
+    refresh = profC.refresh_interval
+    poll = min(POLL_S, refresh)      # a poll coarser than the refresh caps it
+
+    next_refresh = time.perf_counter()  # sample at once, then every refresh
     while True :
-        time.sleep(POLL_S)
+        time.sleep(poll)
         now = time.perf_counter()
         if now >= next_refresh :
-            next_refresh = now + REFRESH_S
+            next_refresh = now + refresh
             t_str = htd(now - start_time)
             dm = process.memory_info().rss - start_mem
             profC.thread_view(fname, dm) #sauvegarde delta mem max

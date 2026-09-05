@@ -1,6 +1,10 @@
 """`options()`, the Interactivity branches, and the legacy keyword aliases."""
 
+import time
+
 import pytest
+
+from custom_profiler import profiler
 
 from custom_profiler.collecteur import Interactivity
 
@@ -164,3 +168,49 @@ def test_configuring_the_logger_twice_is_idempotent(run_py):
         """
     )
     assert "SECOND ok" in out
+
+
+# --- refresh_interval --------------------------------------------------------
+
+def test_refresh_interval_defaults_to_one_second(pc):
+    assert pc.refresh_interval == 1.
+
+
+def test_refresh_interval_is_settable(pc):
+    pc.options(refresh_interval=0.05)
+    assert pc.refresh_interval == 0.05
+
+
+@pytest.mark.parametrize("bad", [0, -1, "fast", None, True])
+def test_refresh_interval_must_be_a_positive_number(pc, bad):
+    with pytest.raises(AssertionError, match="refresh_interval"):
+        pc.options(refresh_interval=bad)
+
+
+def test_refresh_interval_survives_a_partial_call(pc):
+    pc.options(refresh_interval=0.05)
+    pc.options(no_summary_in_log=True)
+    assert pc.refresh_interval == 0.05
+
+
+def test_a_lowered_interval_catches_a_transient_peak(pc, capsys):
+    """The point of the knob: a spike that opens and closes inside the call is
+    invisible in Δ, and only a fast enough sampler sees it at all.
+
+    One-sided on purpose: that the 1s default *misses* it depends on when the
+    first sample happens to land, which a loaded runner decides, not us.
+    """
+    def transient():
+        time.sleep(0.05)
+        big = [2] * (2 * 10 ** 6)         # ~16 MB, freed before returning
+        time.sleep(0.15)
+        del big
+        time.sleep(0.05)
+
+    pc.options(interactivity=Interactivity.MF_NO_INTERAC, refresh_interval=0.01)
+    profiler(transient, name="sampled")()
+    capsys.readouterr()
+
+    data = pc["sampled"]
+    assert data["max_memory_b"] < 8 * 10 ** 6            # Δ sees nothing
+    assert data["peak_memory_b"] > 8 * 10 ** 6           # the sampler does

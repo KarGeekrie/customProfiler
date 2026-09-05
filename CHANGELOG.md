@@ -59,6 +59,10 @@ First stable release. Every 0.3 name still works; the misspelled ones now raise
   no-op, so profiled code costs nothing in production.
 * `py.typed` and type hints on the public API.
 * `per_call_memory_b`, the per-call memory list.
+* `options(refresh_interval=…)`: how often the watcher samples memory and repaints,
+  one second by default. At that default a spike that opens and closes inside a
+  call is sampled zero times and `peak` just repeats `Δ`; lowering it is how you
+  get the real figure.
 * A test suite (`pytest`), and CI on Linux, macOS and Windows.
 
 ### Changed

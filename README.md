@@ -41,6 +41,8 @@ git clone https://github.com/KarGeekrie/customProfiler.git
 pip install -e "customProfiler[test]"
 ```
 
+The installed version is available as `custom_profiler.__version__`.
+
 Run the test suite (the demo scripts of this README live in `test/demo/`):
 ```bash
 cd customProfiler && pytest
@@ -95,6 +97,16 @@ b = my_func()
 c = my_func()
 ```
 
+Give an entry a name of your own with `name=`, on either decorator — useful when the
+function name is not what you want to read in the log, or when the same function is
+profiled from two places:
+
+```python
+@profiler(name="load the config")
+def _load():
+    ...
+```
+
 Your log:
 ```bash
  ⚡ my_func                                       | takes :        4.14s  | consumes :  Δ    7.8M / peak  160.2M
@@ -125,7 +137,8 @@ the end of the run.
 * **Δ** — process RSS when the call returned, minus RSS when it started. Exact, but
   it is the whole process, not your function: see [Limitations](#limitations)
 * **peak** — the highest `Δ` the watcher thread saw *during* the call. Only shown
-  when a watcher ran, and only a 1 Hz sample. Absent in line-by-line mode
+  when a watcher ran, and sampled once a second by default — see
+  `refresh_interval` and [Limitations](#limitations). Absent in line-by-line mode
 
 Nested calls are indented two spaces per level, `┌─` opening a group and `├─`
 marking a sibling at the same level:
@@ -212,6 +225,28 @@ You can access profiler data by requesting it from `profiler_collecteur["my_func
 * *max_memory* / *max_memory_b*: maximum memory used by the function (as a string or in bytes)
 * *per_call_memory_b*: the memory consumed by each individual call, in bytes
 * *peak_memory* / *peak_memory_b*: similar to max_memory, but provides access to thread data. Threads can detect memory peaks during the function execution. *max_memory* only computes the delta memory between the start and end of the function.
+
+`profiler_collecteur` is a mapping, so you do not need to know the names in advance:
+
+```python
+from custom_profiler import profiler_collecteur as pc
+
+len(pc)                       # how many things were profiled
+"my_func" in pc               # was this one ever called
+for name in pc:               # every name, in the order first seen
+    print(name, pc[name]["global_time"])
+
+pc.keys(), pc.items(), pc.values()
+
+pc.to_dict()                  # everything at once, as plain dicts:
+                              # {"global_info": {...}, "profiled": {name: {...}}}
+pc.reset()                    # drop the measurements and start a new phase.
+                              # The global timer keeps running.
+```
+
+`to_dict()` is the export path — it is JSON-serialisable, so writing a run to a file
+is one line. `reset()` is how you profile a long process in phases rather than as one
+average.
 
 Global data is also available with `profiler_collecteur.get_global_info()`:
 * *global_run_time* / *global_run_time_s*: global time since `import custom_profiler` (as a string or in seconds)
@@ -330,6 +365,8 @@ The other options allow you to activate a logger :
 * *profiler_level* : logging level, default : *25*
 * *force_print_in_console* : if the logger is enabled, force print in the console and in the logger. Default: False
 * *no_summary_in_log* : if the logger is enabled, disable the profiler summary in the logger. Default: False
+* *refresh_interval* : how often, in seconds, the watcher thread samples memory and
+  repaints the interactive line. Default: *1.0*
 
 `options()` only changes what you pass it: a partial call leaves every other option
 alone.
@@ -426,26 +463,46 @@ Worth knowing before you trust a number:
   if a line-by-line run prints no lines, that is why. It also makes the traced
   function much slower, follows only the decorated function and not the functions it
   calls, and reports no memory peak.
-* **The memory peak is sampled once per second** by the watcher thread, so a
-  spike inside a fast function can be missed. The `Δ` column is exact; the `peak`
-  column is a best effort.
+* **The memory peak is sampled once per second** by the watcher thread. Below about
+  two seconds per call, treat `peak` as indicative and trust only `Δ`: a spike that
+  opens and closes inside the call is sampled zero times, and `peak` then just
+  repeats `Δ`. Lower `refresh_interval` when you need the real figure —
+  a transient 160 MB allocation inside a 450 ms call:
+
+  ```
+  refresh_interval = 1.0    Δ =  20.0K   peak =  20.0K     # never sampled
+  refresh_interval = 0.02   Δ =  20.0K   peak = 152.6M     # caught
+  ```
+
+  The cost is one `memory_info()` read per interval, and a faster repaint of the
+  interactive line when it is on.
 * The profiler itself costs time. For microbenchmarks, use `timeit`.
 
 ## Raw profiler
 
-If you don't want any dependencies, simply copy the following code:
+If you would rather not add a dependency on this package, copy the following instead.
+It still needs `psutil` — that is where the memory readings come from — but it is
+self-contained and has no other moving parts.
 
 ```python
 import functools
 import time
 import sys
 import psutil
-from psutil._common import bytes2human
 
 if sys.platform != 'win32':
     import resource
 
 process = psutil.Process()
+
+_UNITS = ('B', 'K', 'M', 'G', 'T', 'P')
+
+def bytes2human(nbytes):
+    for i in range(len(_UNITS) - 1, 0, -1):
+        step = 1 << (i * 10)
+        if abs(nbytes) >= step:
+            return f"{nbytes / step:.1f}{_UNITS[i]}"
+    return f"{nbytes:.1f}B"
 
 dicoPerf = {}
 
@@ -480,7 +537,7 @@ class magic_profiler():
         end_time = time.perf_counter()
         end_mem = process.memory_info().rss
         nplog = (end_time - self.start_time, end_mem - self.start_mem)
-        if self.name in dicoPerf.keys():
+        if self.name in self.dicoPerf.keys():
             self.dicoPerf[self.name] += [nplog]
         else:
             self.dicoPerf[self.name] = [nplog]
@@ -536,3 +593,7 @@ dodo()
 postProLogPerf(dicoPerf)
 print(gi)
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
