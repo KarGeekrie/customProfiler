@@ -504,6 +504,28 @@ Worth knowing before you trust a number:
 
   On a platform whose allocator keeps the freed pages, `Δ` would report them too
   and the gap would be smaller — the sampling rate is the part you control.
+* **Under the GIL, sampling stops entirely during a C call that holds it** — and
+  `refresh_interval` cannot help, because the watcher is not running at all. It is a
+  python thread: it sleeps, releasing the GIL, then has to *take it back* to do
+  anything. A C extension that never releases it starves the watcher until the call
+  returns, so `peak` freezes and so does the interactive line.
+
+  Measured at `refresh_interval = 0.01`, `math.factorial(300000)` against a
+  one-second python loop:
+
+  |  | C call holding the GIL | python loop |
+  |---|---|---|
+  | 3.12, with the GIL | **2** samples of 161 expected | 46 of 100 |
+  | 3.13t, free-threaded | **144** of 158 | 95 of 101 |
+
+  This is not "C code is invisible": plenty of extensions release the GIL — numpy on
+  large arrays, I/O, compression — and a pure python loop releases it regularly. It
+  is the opaque, GIL-holding call that goes unwatched, which is often the one you
+  most wanted to watch.
+
+  On a free-threaded build the watcher runs in parallel and the numbers are real,
+  with nothing to configure. `sys._is_gil_enabled()` tells you which build you are
+  on, from python 3.13.
 
   The cost is one `memory_info()` read per interval, and a faster repaint of the
   interactive line when it is on.

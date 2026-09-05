@@ -26,6 +26,9 @@
   lines and the summary so they stay aligned. `None` never truncates: the summary
   sizes itself to its longest name. Default 45, as before — a dotted module path
   used to lose its tail, which is the part that tells two entries apart.
+* The README says what the GIL does to sampling: a C call that holds it starves
+  the watcher completely, so `refresh_interval` cannot help there. Measured, with
+  the free-threaded comparison.
 * `options(summary_time=…)` picks the time statistic the summary shows —
   `"mean"`, `"max"`, `"median"`, `"p95"`, or a tuple of them, which widens the
   column and the rule to match.
