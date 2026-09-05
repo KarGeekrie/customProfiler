@@ -467,12 +467,15 @@ Worth knowing before you trust a number:
   two seconds per call, treat `peak` as indicative and trust only `Δ`: a spike that
   opens and closes inside the call is sampled zero times, and `peak` then just
   repeats `Δ`. Lower `refresh_interval` when you need the real figure —
-  a transient 160 MB allocation inside a 450 ms call:
+  a transient 160 MB allocation inside a 450 ms call, measured on Linux:
 
   ```
   refresh_interval = 1.0    Δ =  20.0K   peak =  20.0K     # never sampled
   refresh_interval = 0.02   Δ =  20.0K   peak = 152.6M     # caught
   ```
+
+  On a platform whose allocator keeps the freed pages, `Δ` would report them too
+  and the gap would be smaller — the sampling rate is the part you control.
 
   The cost is one `memory_info()` read per interval, and a faster repaint of the
   interactive line when it is on.
